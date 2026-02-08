@@ -19,7 +19,7 @@ export default function SnowRemovalPage() {
           fill
           priority
           sizes="100vw"
-          className="object-cover object-[center_30%]"
+          className="object-cover object-[center_55%]"
         />
 
         {/* Overlay */}
@@ -131,7 +131,7 @@ export default function SnowRemovalPage() {
           alt="Freshly mowed residential lawn"
           fill
           sizes="100vw"
-          className="object-cover object-[center_40%]"
+          className="object-cover object-[center_50%]"
         />
         <div className="absolute inset-0 bg-charcoal/30" />
       </section>
