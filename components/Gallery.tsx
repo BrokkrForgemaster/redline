@@ -21,6 +21,36 @@ const galleryItems = [
     category: "lawn-care",
   },
   {
+    src: "/images/mowing2.jpeg",
+    alt: "Striped lawn in front of residential brick home",
+    title: "Residential Striping",
+    category: "lawn-care",
+  },
+  {
+    src: "/images/mowing3.jpeg",
+    alt: "Clean mowing stripes on a commercial roadside lot",
+    title: "Commercial Roadside Mowing",
+    category: "lawn-care",
+  },
+  {
+    src: "/images/mowing4.jpeg",
+    alt: "Freshly mowed residential yard with mature trees",
+    title: "Neighborhood Lawn Care",
+    category: "lawn-care",
+  },
+  {
+    src: "/images/mowing5.jpeg",
+    alt: "Commercial lot mowing with clean stripes along the road",
+    title: "Commercial Lot Maintenance",
+    category: "lawn-care",
+  },
+  {
+    src: "/images/mowing6.jpeg",
+    alt: "Large backyard with professional mowing stripes and brick home",
+    title: "Large Property Mowing",
+    category: "lawn-care",
+  },
+  {
     src: "/images/burnside.png",
     alt: "Night shot of baseball field mowing at Burnside",
     title: "Athletic Field Maintenance",
@@ -38,12 +68,30 @@ const galleryItems = [
     title: "Core Aeration",
     category: "lawn-care",
   },
+  {
+    src: "/images/aeration.jpeg",
+    alt: "Close-up of soil plugs after core aeration",
+    title: "Aeration Results",
+    category: "lawn-care",
+  },
 
   // Landscaping
   {
     src: "/images/landscaping.jpeg",
     alt: "Stone steps, patio, and fire pit hardscaping project",
     title: "Hardscaping & Patio",
+    category: "landscaping",
+  },
+  {
+    src: "/images/landscaping1.jpeg",
+    alt: "Crew clearing overgrown bamboo and brush",
+    title: "Brush & Bamboo Clearing",
+    category: "landscaping",
+  },
+  {
+    src: "/images/landscaping2.jpeg",
+    alt: "Large bamboo and brush removal project in progress",
+    title: "Land Clearing",
     category: "landscaping",
   },
 
@@ -58,6 +106,12 @@ const galleryItems = [
     src: "/images/snow2.png",
     alt: "Trucks with SnowEx salt spreaders ready for winter",
     title: "Salt & Ice Management",
+    category: "snow-removal",
+  },
+  {
+    src: "/images/snow3.jpeg",
+    alt: "Red Chevy truck with Western plow ready for snow removal",
+    title: "Plow Truck Ready",
     category: "snow-removal",
   },
 ];

@@ -3,6 +3,8 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 
+const siteUrl = process.env.SITE_URL?.[1] ?? "http://localhost:3001";
+
 export const metadata: Metadata = {
   title: {
     default: "Redline Landscaping & Snow Removal | Central Kentucky",
@@ -10,14 +12,14 @@ export const metadata: Metadata = {
   },
   description:
     "Professional lawn care, landscaping, and snow removal services in Central Kentucky. Reliable, affordable, and always on time.",
-  metadataBase: new URL("https://redlinelandscaping.com"),
+  metadataBase: new URL(`${siteUrl}`),
   openGraph: {
     type: "website",
     locale: "en_US",
     siteName: "Redline Landscaping & Snow Removal",
     images: [
       {
-        url: "/images/mowing1.jpeg",
+        url: `${siteUrl}images/mowing1.jpeg`,
         width: 1200,
         height: 630,
         alt: "Redline Landscaping & Snow Removal — professional lawn care in Central Kentucky",
@@ -29,7 +31,7 @@ export const metadata: Metadata = {
     title: "Redline Landscaping & Snow Removal | Central Kentucky",
     description:
       "Professional lawn care, landscaping, and snow removal services in Central Kentucky. Firefighter owned & operated.",
-    images: ["/images/mowing1.jpeg"],
+    images: [`${siteUrl}images/mowing1.jpeg`],
   },
 };
 
@@ -50,7 +52,7 @@ export default function RootLayout({
               name: "Redline Landscaping & Snow Removal",
               description:
                 "Professional lawn care, landscaping, and snow removal services in Central Kentucky.",
-              url: "https://redlinelandscaping.com",
+              url: `${siteUrl}`,
               telephone: "+16064250891",
               address: {
                 "@type": "PostalAddress",

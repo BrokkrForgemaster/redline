@@ -21,13 +21,22 @@ const services = [
     delay: "delay-100",
   },
   {
+    title: "Aeration & Overseeding",
+    slug: "aeration-overseeding",
+    description:
+      "Revive your lawn with core aeration and premium overseeding for a thicker, healthier turf.",
+    image: "/images/aeration.png",
+    accent: "bg-lawn",
+    delay: "delay-200",
+  },
+  {
     title: "Snow Removal",
     slug: "snow-removal",
     description:
       "Fast, dependable snow plowing and ice management to keep your property safe and accessible.",
     image: "/images/snow.png",
     accent: "bg-redline",
-    delay: "delay-200",
+    delay: "delay-300",
   },
 ];
 
@@ -48,7 +57,7 @@ export default function Services() {
           </p>
         </div>
 
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="mt-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {services.map((service) => (
             <Link
               key={service.title}

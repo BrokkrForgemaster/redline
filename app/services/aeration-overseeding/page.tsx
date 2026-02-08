@@ -23,14 +23,14 @@ export default function AerationOverseedingPage() {
   return (
     <>
       {/* Hero with image */}
-      <section className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
+      <section className="relative w-full aspect-[4/3] sm:aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
         <Image
           src="/images/aeration.png"
           alt="Close-up of lawn aeration by Redline"
           fill
           priority
           sizes="100vw"
-          className="object-cover object-[center_40%]"
+          className="object-cover object-[center_35%]"
         />
 
         {/* Overlay */}
