@@ -45,6 +45,22 @@ const services = [
     buttonClass: "bg-lawn hover:bg-lawn-dark",
   },
   {
+    title: "Aeration & Overseeding",
+    slug: "aeration-overseeding",
+    description:
+      "Revive your lawn with professional core aeration and overseeding. We relieve soil compaction and fill in thin spots for a thicker, healthier turf.",
+    features: [
+      "Core aeration",
+      "Premium seed blend",
+      "Soil compaction relief",
+      "Thicker, healthier turf",
+    ],
+    image: "/images/aeration.png",
+    accent: "border-lawn",
+    checkColor: "text-lawn",
+    buttonClass: "bg-lawn hover:bg-lawn-dark",
+  },
+  {
     title: "Snow Removal",
     slug: "snow-removal",
     description:

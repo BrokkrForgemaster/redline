@@ -74,6 +74,7 @@ export default function RootLayout({
               serviceType: [
                 "Lawn Mowing",
                 "Landscaping",
+                "Aeration & Overseeding",
                 "Snow Removal",
               ],
               openingHours: ["Mo-Fr 07:00-18:00", "Sa 08:00-14:00"],

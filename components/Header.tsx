@@ -36,6 +36,12 @@ export default function Header() {
               Services
             </Link>
             <Link
+              href="/gallery"
+              className="text-base font-semibold text-gray-300 px-5 py-2.5 rounded-md hover:bg-white/10 hover:text-redline transition-all duration-200"
+            >
+              Gallery
+            </Link>
+            <Link
               href="/about"
               className="text-base font-semibold text-gray-300 px-5 py-2.5 rounded-md hover:bg-white/10 hover:text-redline transition-all duration-200"
             >
@@ -103,6 +109,13 @@ export default function Header() {
             onClick={() => setMobileOpen(false)}
           >
             Services
+          </Link>
+          <Link
+            href="/gallery"
+            className="block text-base font-semibold text-gray-300 hover:text-redline hover:bg-white/10 px-4 py-3 rounded-md transition-all duration-200"
+            onClick={() => setMobileOpen(false)}
+          >
+            Gallery
           </Link>
           <Link
             href="/about"
