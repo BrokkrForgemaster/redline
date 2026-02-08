@@ -12,15 +12,20 @@ export default function LawnMowingPage() {
   return (
     <>
       {/* Hero with image */}
-      <section className="relative h-72 md:h-96 overflow-hidden">
+      <section className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
         <Image
           src="/images/mowing1.jpeg"
           alt="Professional mowing by Redline"
           fill
-          className="object-cover"
           priority
+          sizes="100vw"
+          className="object-cover object-[center_35%]"
         />
+
+        {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-charcoal/80 to-charcoal/40" />
+
+        {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 h-full flex flex-col justify-end pb-12">
           <Link
             href="/services"
@@ -28,10 +33,12 @@ export default function LawnMowingPage() {
           >
             &larr; Back to Services
           </Link>
+
           <span className="inline-block bg-lawn text-white text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full w-fit mb-3">
             Lawn Care
           </span>
-          <h1 className="animate-fade-in-up text-4xl md:text-5xl font-bold text-white">
+
+          <h1 className="text-4xl md:text-5xl font-bold text-white">
             Lawn Mowing
           </h1>
         </div>
@@ -65,8 +72,18 @@ export default function LawnMowingPage() {
                 "Consistent weekly or bi-weekly scheduling",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-3 text-charcoal">
-                  <svg className="w-5 h-5 text-lawn flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-5 h-5 text-lawn flex-shrink-0 mt-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                   <span className="leading-relaxed">{item}</span>
                 </li>
@@ -107,12 +124,13 @@ export default function LawnMowingPage() {
       </section>
 
       {/* Photo break */}
-      <section className="relative h-64 md:h-80 overflow-hidden">
+      <section className="relative w-full aspect-[16/9] max-h-[50vh] overflow-hidden">
         <Image
           src="/images/mowing.png"
           alt="Freshly mowed residential lawn"
           fill
-          className="object-cover"
+          sizes="100vw"
+          className="object-cover object-[center_40%]"
         />
         <div className="absolute inset-0 bg-charcoal/30" />
       </section>

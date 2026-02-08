@@ -12,15 +12,20 @@ export default function LandscapingPage() {
   return (
     <>
       {/* Hero with image */}
-      <section className="relative h-72 md:h-96 overflow-hidden">
+      <section className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
         <Image
           src="/images/landscaping.jpeg"
           alt="Landscaping project by Redline"
           fill
-          className="object-cover"
           priority
+          sizes="100vw"
+          className="object-cover object-[center_35%]"
         />
+
+        {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-charcoal/80 to-charcoal/40" />
+
+        {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 h-full flex flex-col justify-end pb-12">
           <Link
             href="/services"
@@ -28,10 +33,12 @@ export default function LandscapingPage() {
           >
             &larr; Back to Services
           </Link>
+
           <span className="inline-block bg-lawn text-white text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full w-fit mb-3">
             Outdoor Living
           </span>
-          <h1 className="animate-fade-in-up text-4xl md:text-5xl font-bold text-white">
+
+          <h1 className="text-4xl md:text-5xl font-bold text-white">
             Landscaping
           </h1>
         </div>
@@ -53,9 +60,7 @@ export default function LandscapingPage() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16">
           {/* Services */}
           <div className="animate-fade-in-up">
-            <h2 className="text-3xl font-bold text-charcoal">
-              What We Offer
-            </h2>
+            <h2 className="text-3xl font-bold text-charcoal">What We Offer</h2>
             <ul className="mt-6 space-y-4">
               {[
                 "Custom landscape design tailored to your property and budget",
@@ -65,8 +70,18 @@ export default function LandscapingPage() {
                 "Seasonal cleanups and property refresh",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-3 text-charcoal">
-                  <svg className="w-5 h-5 text-lawn flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-5 h-5 text-lawn flex-shrink-0 mt-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                   <span className="leading-relaxed">{item}</span>
                 </li>
@@ -76,9 +91,7 @@ export default function LandscapingPage() {
 
           {/* Process */}
           <div className="animate-fade-in-up delay-200">
-            <h2 className="text-3xl font-bold text-charcoal">
-              Our Process
-            </h2>
+            <h2 className="text-3xl font-bold text-charcoal">Our Process</h2>
             <div className="mt-6 space-y-6">
               {[
                 {
@@ -128,8 +141,8 @@ export default function LandscapingPage() {
             Let&apos;s Transform Your Property
           </h2>
           <p className="mt-4 text-muted max-w-xl mx-auto leading-relaxed">
-            Tell us what you have in mind and we&apos;ll schedule a free
-            on-site consultation.
+            Tell us what you have in mind and we&apos;ll schedule a free on-site
+            consultation.
           </p>
           <Link
             href="/contact"

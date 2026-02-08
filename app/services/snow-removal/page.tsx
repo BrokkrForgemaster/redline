@@ -12,15 +12,20 @@ export default function SnowRemovalPage() {
   return (
     <>
       {/* Hero with image — ice/redline accent */}
-      <section className="relative h-72 md:h-96 overflow-hidden">
+      <section className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
         <Image
           src="/images/snow.png"
           alt="Redline snow plow trucks ready for action"
           fill
-          className="object-cover"
           priority
+          sizes="100vw"
+          className="object-cover object-[center_30%]"
         />
+
+        {/* Overlay */}
         <div className="absolute inset-0 bg-gradient-to-r from-charcoal/80 to-charcoal/40" />
+
+        {/* Content */}
         <div className="relative z-10 max-w-7xl mx-auto px-6 h-full flex flex-col justify-end pb-12">
           <Link
             href="/services"
@@ -28,10 +33,12 @@ export default function SnowRemovalPage() {
           >
             &larr; Back to Services
           </Link>
+
           <span className="inline-block bg-redline text-white text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full w-fit mb-3">
             Winter Services
           </span>
-          <h1 className="animate-fade-in-up text-4xl md:text-5xl font-bold text-white">
+
+          <h1 className="text-4xl md:text-5xl font-bold text-white">
             Snow Removal
           </h1>
         </div>
@@ -53,9 +60,7 @@ export default function SnowRemovalPage() {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-16">
           {/* Services */}
           <div className="animate-fade-in-up">
-            <h2 className="text-3xl font-bold text-charcoal">
-              What We Offer
-            </h2>
+            <h2 className="text-3xl font-bold text-charcoal">What We Offer</h2>
             <ul className="mt-6 space-y-4">
               {[
                 "Residential driveway and walkway plowing",
@@ -65,8 +70,18 @@ export default function SnowRemovalPage() {
                 "24/7 emergency storm response",
               ].map((item) => (
                 <li key={item} className="flex items-start gap-3 text-charcoal">
-                  <svg className="w-5 h-5 text-redline flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  <svg
+                    className="w-5 h-5 text-redline flex-shrink-0 mt-0.5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
                   </svg>
                   <span className="leading-relaxed">{item}</span>
                 </li>
@@ -94,7 +109,10 @@ export default function SnowRemovalPage() {
                   text: "Our ice treatment and salting reduces slip-and-fall risk on your property.",
                 },
               ].map((item) => (
-                <div key={item.title} className="border-l-4 border-redline pl-4">
+                <div
+                  key={item.title}
+                  className="border-l-4 border-redline pl-4"
+                >
                   <h3 className="text-xl font-semibold text-charcoal">
                     {item.title}
                   </h3>
@@ -107,12 +125,13 @@ export default function SnowRemovalPage() {
       </section>
 
       {/* Equipment photo break */}
-      <section className="relative h-64 md:h-80 overflow-hidden">
+      <section className="relative w-full aspect-[16/9] max-h-[50vh] overflow-hidden">
         <Image
           src="/images/snow2.png"
-          alt="Redline trucks with salt spreaders"
+          alt="Freshly mowed residential lawn"
           fill
-          className="object-cover"
+          sizes="100vw"
+          className="object-cover object-[center_40%]"
         />
         <div className="absolute inset-0 bg-charcoal/30" />
       </section>
@@ -124,8 +143,8 @@ export default function SnowRemovalPage() {
             Be Ready Before the First Snowfall
           </h2>
           <p className="mt-4 text-muted max-w-xl mx-auto leading-relaxed">
-            Lock in your seasonal snow removal contract now. We&apos;ll be
-            there when you need us.
+            Lock in your seasonal snow removal contract now. We&apos;ll be there
+            when you need us.
           </p>
           <Link
             href="/contact"
