@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Landscaping Services | Redline Landscaping & Snow Removal",
   description:
     "Custom landscaping, mulching, garden beds, and hardscaping services in Central Kentucky. Transform your outdoor space with Redline.",
+  openGraph: {
+    images: [{ url: "/images/landscaping.jpeg", width: 1200, height: 630, alt: "Custom landscaping and hardscaping in Central Kentucky" }],
+  },
 };
 
 export default function LandscapingPage() {

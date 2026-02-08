@@ -15,6 +15,21 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     siteName: "Redline Landscaping & Snow Removal",
+    images: [
+      {
+        url: "/images/mowing1.jpeg",
+        width: 1200,
+        height: 630,
+        alt: "Redline Landscaping & Snow Removal — professional lawn care in Central Kentucky",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Redline Landscaping & Snow Removal | Central Kentucky",
+    description:
+      "Professional lawn care, landscaping, and snow removal services in Central Kentucky. Firefighter owned & operated.",
+    images: ["/images/mowing1.jpeg"],
   },
 };
 

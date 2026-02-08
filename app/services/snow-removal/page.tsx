@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Snow Removal Services | Redline Landscaping & Snow Removal",
   description:
     "Reliable snow plowing, ice treatment, and winter storm response in Central Kentucky. Keep your property safe and accessible all winter.",
+  openGraph: {
+    images: [{ url: "/images/snow.png", width: 1200, height: 630, alt: "Redline snow removal trucks ready for winter in Central Kentucky" }],
+  },
 };
 
 export default function SnowRemovalPage() {

@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "About Us | Redline Landscaping & Snow Removal",
   description:
     "Meet Ryan Gretz, firefighter and owner of Redline Landscaping & Snow Removal. Over 12 years of lawn care experience serving Central Kentucky.",
+  openGraph: {
+    images: [{ url: "/images/Ryan_Shelby.jpg", width: 1200, height: 630, alt: "Ryan Gretz, owner of Redline Landscaping & Snow Removal" }],
+  },
 };
 
 export default function AboutPage() {

@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Lawn Mowing Services | Redline Landscaping & Snow Removal",
   description:
     "Professional lawn mowing, edging, and trimming services in Central Kentucky. Weekly and bi-weekly scheduling available. Get a free quote today.",
+  openGraph: {
+    images: [{ url: "/images/mowing1.jpeg", width: 1200, height: 630, alt: "Professional lawn mowing in Central Kentucky" }],
+  },
 };
 
 export default function LawnMowingPage() {

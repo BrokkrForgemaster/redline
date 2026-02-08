@@ -4,6 +4,9 @@ export const metadata: Metadata = {
   title: "Contact Us | Redline Landscaping & Snow Removal",
   description:
     "Get in touch with Redline Landscaping & Snow Removal for a free quote. Serving Central Kentucky with lawn care, landscaping, and snow removal.",
+  openGraph: {
+    images: [{ url: "/images/mowing1.jpeg", width: 1200, height: 630, alt: "Contact Redline Landscaping for a free quote" }],
+  },
 };
 
 export default function ContactPage() {

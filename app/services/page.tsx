@@ -6,6 +6,9 @@ export const metadata: Metadata = {
   title: "Our Services | Redline Landscaping & Snow Removal",
   description:
     "Lawn mowing, landscaping, and snow removal services in Central Kentucky. Year-round property maintenance you can count on.",
+  openGraph: {
+    images: [{ url: "/images/mowing1.jpeg", width: 1200, height: 630, alt: "Redline Landscaping services in Central Kentucky" }],
+  },
 };
 
 const services = [

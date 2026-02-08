@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "Reviews | Redline Landscaping & Snow Removal",
   description:
     "See what our customers are saying about Redline Landscaping & Snow Removal. Trusted lawn care and snow removal in Central Kentucky.",
+  openGraph: {
+    images: [{ url: "/images/mowing1.jpeg", width: 1200, height: 630, alt: "Redline Landscaping customer reviews" }],
+  },
 };
 
 const reviews = [
