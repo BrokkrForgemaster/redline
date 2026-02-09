@@ -129,7 +129,7 @@ export default function LawnMowingPage() {
       {/* Photo break */}
       <section className="relative w-full aspect-[16/9] max-h-[50vh] overflow-hidden">
         <Image
-          src="/images/mowing.png"
+          src="/images/mowing.jpeg"
           alt="Freshly mowed residential lawn"
           fill
           sizes="100vw"

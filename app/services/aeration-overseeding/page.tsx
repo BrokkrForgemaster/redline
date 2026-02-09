@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   openGraph: {
     images: [
       {
-        url: "/images/aeration.png",
+        url: "/images/aeration.jpeg",
         width: 1200,
         height: 630,
         alt: "Professional lawn aeration in Central Kentucky",
@@ -25,7 +25,7 @@ export default function AerationOverseedingPage() {
       {/* Hero with image */}
       <section className="relative w-full aspect-[4/3] sm:aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
         <Image
-          src="/images/aeration.png"
+          src="/images/aeration.jpeg"
           alt="Close-up of lawn aeration by Redline"
           fill
           priority

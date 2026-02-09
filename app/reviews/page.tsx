@@ -1,16 +1,25 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getReviews } from "@/lib/wordpress";
 
 export const metadata: Metadata = {
   title: "Reviews | Redline Landscaping & Snow Removal",
   description:
     "See what our customers are saying about Redline Landscaping & Snow Removal. Trusted lawn care and snow removal in Central Kentucky.",
   openGraph: {
-    images: [{ url: "/images/mowing1.jpeg", width: 1200, height: 630, alt: "Redline Landscaping customer reviews" }],
+    images: [
+      {
+        url: "/images/mowing1.jpeg",
+        width: 1200,
+        height: 630,
+        alt: "Redline Landscaping customer reviews",
+      },
+    ],
   },
 };
 
-const reviews = [
+/* Fallback reviews shown when WordPress has none yet */
+const fallbackReviews = [
   {
     name: "Ava B.",
     location: "Richmond, KY",
@@ -35,7 +44,12 @@ function StarRating() {
   return (
     <div className="flex gap-0.5 text-yellow-500">
       {[...Array(5)].map((_, i) => (
-        <svg key={i} className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <svg
+          key={i}
+          className="w-5 h-5"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
       ))}
@@ -43,7 +57,10 @@ function StarRating() {
   );
 }
 
-export default function ReviewsPage() {
+export default async function ReviewsPage() {
+  const wpReviews = await getReviews();
+  const reviews = wpReviews.length > 0 ? wpReviews : fallbackReviews;
+
   return (
     <>
       {/* Page Header */}
@@ -89,7 +106,8 @@ export default function ReviewsPage() {
             Ready to See for Yourself?
           </h2>
           <p className="mt-4 text-muted max-w-xl mx-auto leading-relaxed">
-            Join our growing list of satisfied customers across Central Kentucky.
+            Join our growing list of satisfied customers across Central
+            Kentucky.
           </p>
           <Link
             href="/contact"

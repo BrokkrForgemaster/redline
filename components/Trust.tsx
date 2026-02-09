@@ -44,7 +44,7 @@ export default function Trust() {
           <div className="grid grid-cols-2 gap-4 animate-slide-in-left">
             <div className="relative h-64 rounded-xl overflow-hidden shadow-lg">
               <Image
-                src="/images/burnside.png"
+                src="/images/burnside.jpeg"
                 alt="Professional field mowing at Burnside"
                 fill
                 className="object-cover"

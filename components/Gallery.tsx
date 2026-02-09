@@ -9,7 +9,7 @@ import Image from "next/image";
 const galleryItems = [
   // Lawn Care
   {
-    src: "/images/mowing.png",
+    src: "/images/mowing.jpeg",
     alt: "Freshly mowed residential lawn with striped pattern",
     title: "Residential Lawn Care",
     category: "lawn-care",
@@ -51,7 +51,7 @@ const galleryItems = [
     category: "lawn-care",
   },
   {
-    src: "/images/burnside.png",
+    src: "/images/burnside.jpeg",
     alt: "Night shot of baseball field mowing at Burnside",
     title: "Athletic Field Maintenance",
     category: "lawn-care",
@@ -63,7 +63,7 @@ const galleryItems = [
     category: "lawn-care",
   },
   {
-    src: "/images/aeration.png",
+    src: "/images/aeration.jpeg",
     alt: "Close-up of lawn aeration plugs",
     title: "Core Aeration",
     category: "lawn-care",
@@ -97,13 +97,13 @@ const galleryItems = [
 
   // Snow Removal
   {
-    src: "/images/snow.png",
+    src: "/images/snow.jpeg",
     alt: "Red Chevy trucks equipped with Western snow plows",
     title: "Snow Plow Fleet",
     category: "snow-removal",
   },
   {
-    src: "/images/snow2.png",
+    src: "/images/snow2.jpeg",
     alt: "Trucks with SnowEx salt spreaders ready for winter",
     title: "Salt & Ice Management",
     category: "snow-removal",

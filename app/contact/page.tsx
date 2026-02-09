@@ -1,15 +1,52 @@
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = {
-  title: "Contact Us | Redline Landscaping & Snow Removal",
-  description:
-    "Get in touch with Redline Landscaping & Snow Removal for a free quote. Serving Central Kentucky with lawn care, landscaping, and snow removal.",
-  openGraph: {
-    images: [{ url: "/images/mowing1.jpeg", width: 1200, height: 630, alt: "Contact Redline Landscaping for a free quote" }],
-  },
-};
+import { useState, type FormEvent } from "react";
 
 export default function ContactPage() {
+  const [status, setStatus] = useState<
+    "idle" | "sending" | "success" | "error"
+  >("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setStatus("sending");
+    setErrorMsg("");
+
+    const form = e.currentTarget;
+    const data = {
+      name: (form.elements.namedItem("name") as HTMLInputElement).value,
+      email: (form.elements.namedItem("email") as HTMLInputElement).value,
+      phone: (form.elements.namedItem("phone") as HTMLInputElement).value,
+      service: (form.elements.namedItem("service") as HTMLSelectElement).value,
+      message: (form.elements.namedItem("message") as HTMLTextAreaElement)
+        .value,
+    };
+
+    try {
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.error || "Failed to send message.");
+      }
+
+      setStatus("success");
+      form.reset();
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please call us at (606) 425-0891."
+      );
+    }
+  }
+
   return (
     <>
       {/* Page Header */}
@@ -33,102 +70,138 @@ export default function ContactPage() {
             <h2 className="text-3xl font-bold text-charcoal">
               Request a Free Quote
             </h2>
-            <form className="mt-8 space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+
+            {status === "success" ? (
+              <div className="mt-8 bg-lawn/10 border border-lawn/30 rounded-lg p-6">
+                <h3 className="text-xl font-semibold text-lawn">
+                  Message Sent!
+                </h3>
+                <p className="mt-2 text-charcoal leading-relaxed">
+                  Thanks for reaching out. We&apos;ll get back to you within 24
+                  hours. If you need us sooner, call{" "}
+                  <a
+                    href="tel:+16064250891"
+                    className="font-semibold text-redline hover:underline"
+                  >
+                    (606) 425-0891
+                  </a>
+                  .
+                </p>
+                <button
+                  onClick={() => setStatus("idle")}
+                  className="mt-4 text-sm font-semibold text-lawn hover:underline"
+                >
+                  Send another message
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <label
+                      htmlFor="name"
+                      className="block text-sm font-medium text-charcoal"
+                    >
+                      Name
+                    </label>
+                    <input
+                      type="text"
+                      id="name"
+                      name="name"
+                      required
+                      className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="phone"
+                      className="block text-sm font-medium text-charcoal"
+                    >
+                      Phone
+                    </label>
+                    <input
+                      type="tel"
+                      id="phone"
+                      name="phone"
+                      className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
+                      placeholder="(606) 555-1234"
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label
-                    htmlFor="name"
+                    htmlFor="email"
                     className="block text-sm font-medium text-charcoal"
                   >
-                    Name
+                    Email
                   </label>
                   <input
-                    type="text"
-                    id="name"
-                    name="name"
+                    type="email"
+                    id="email"
+                    name="email"
                     required
                     className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
-                    placeholder="Your name"
+                    placeholder="you@example.com"
                   />
                 </div>
+
                 <div>
                   <label
-                    htmlFor="phone"
+                    htmlFor="service"
                     className="block text-sm font-medium text-charcoal"
                   >
-                    Phone
+                    Service Interested In
                   </label>
-                  <input
-                    type="tel"
-                    id="phone"
-                    name="phone"
-                    className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
-                    placeholder="(606) 425-0891"
+                  <select
+                    id="service"
+                    name="service"
+                    className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
+                  >
+                    <option value="">Select a service</option>
+                    <option value="Lawn Mowing">Lawn Mowing</option>
+                    <option value="Landscaping">Landscaping</option>
+                    <option value="Aeration & Overseeding">
+                      Aeration &amp; Overseeding
+                    </option>
+                    <option value="Snow Removal">Snow Removal</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="message"
+                    className="block text-sm font-medium text-charcoal"
+                  >
+                    Message
+                  </label>
+                  <textarea
+                    id="message"
+                    name="message"
+                    rows={5}
+                    required
+                    className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors resize-y"
+                    placeholder="Tell us about your property and what you need..."
                   />
                 </div>
-              </div>
 
-              <div>
-                <label
-                  htmlFor="email"
-                  className="block text-sm font-medium text-charcoal"
-                >
-                  Email
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  name="email"
-                  required
-                  className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
-                  placeholder="redlineofkentucky@gmail.com"
-                />
-              </div>
+                {status === "error" && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-sm text-red-700">{errorMsg}</p>
+                  </div>
+                )}
 
-              <div>
-                <label
-                  htmlFor="service"
-                  className="block text-sm font-medium text-charcoal"
+                <button
+                  type="submit"
+                  disabled={status === "sending"}
+                  className="bg-redline text-white text-sm font-semibold uppercase tracking-wide px-8 py-3 rounded-md hover:bg-red-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Service Interested In
-                </label>
-                <select
-                  id="service"
-                  name="service"
-                  className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors"
-                >
-                  <option value="">Select a service</option>
-                  <option value="lawn-mowing">Lawn Mowing</option>
-                  <option value="landscaping">Landscaping</option>
-                  <option value="snow-removal">Snow Removal</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="message"
-                  className="block text-sm font-medium text-charcoal"
-                >
-                  Message
-                </label>
-                <textarea
-                  id="message"
-                  name="message"
-                  rows={5}
-                  required
-                  className="mt-1 block w-full rounded-md border border-border bg-white px-4 py-3 text-charcoal placeholder:text-muted focus:border-redline focus:ring-1 focus:ring-redline outline-none transition-colors resize-y"
-                  placeholder="Tell us about your property and what you need..."
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="bg-redline text-white text-sm font-semibold uppercase tracking-wide px-8 py-3 rounded-md hover:bg-red-800 transition-colors"
-              >
-                Send Message
-              </button>
-            </form>
+                  {status === "sending" ? "Sending..." : "Send Message"}
+                </button>
+              </form>
+            )}
           </div>
 
           {/* Contact Info */}
@@ -139,15 +212,23 @@ export default function ContactPage() {
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
                   Phone
                 </h3>
-                <p className="mt-1 text-lg text-charcoal">(606) 425-0891</p>
+                <a
+                  href="tel:+16064250891"
+                  className="mt-1 text-lg text-charcoal hover:text-redline transition-colors"
+                >
+                  (606) 425-0891
+                </a>
               </div>
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
                   Email
                 </h3>
-                <p className="mt-1 text-lg text-charcoal">
+                <a
+                  href="mailto:redlineofkentucky@gmail.com"
+                  className="mt-1 text-lg text-charcoal hover:text-redline transition-colors"
+                >
                   redlineofkentucky@gmail.com
-                </p>
+                </a>
               </div>
               <div>
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">

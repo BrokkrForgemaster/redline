@@ -7,7 +7,7 @@ const services = [
     slug: "lawn-mowing",
     description:
       "Regular mowing, edging, and trimming to keep your lawn looking pristine all season long.",
-    image: "/images/mowing.png",
+    image: "/images/mowing.jpeg",
     accent: "bg-lawn",
     delay: "",
   },
@@ -25,7 +25,7 @@ const services = [
     slug: "aeration-overseeding",
     description:
       "Revive your lawn with core aeration and premium overseeding for a thicker, healthier turf.",
-    image: "/images/aeration.png",
+    image: "/images/aeration.jpeg",
     accent: "bg-lawn",
     delay: "delay-200",
   },
@@ -34,7 +34,7 @@ const services = [
     slug: "snow-removal",
     description:
       "Fast, dependable snow plowing and ice management to keep your property safe and accessible.",
-    image: "/images/snow.png",
+    image: "/images/snow.jpeg",
     accent: "bg-redline",
     delay: "delay-300",
   },

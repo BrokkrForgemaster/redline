@@ -42,6 +42,17 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=GT-T5MRJWHC"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','GT-T5MRJWHC');`,
+          }}
+        />
+      </head>
       <body className="min-h-screen flex flex-col">
         <script
           type="application/ld+json"

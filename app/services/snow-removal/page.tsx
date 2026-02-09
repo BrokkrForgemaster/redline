@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description:
     "Reliable snow plowing, ice treatment, and winter storm response in Central Kentucky. Keep your property safe and accessible all winter.",
   openGraph: {
-    images: [{ url: "/images/snow.png", width: 1200, height: 630, alt: "Redline snow removal trucks ready for winter in Central Kentucky" }],
+    images: [{ url: "/images/snow.jpeg", width: 1200, height: 630, alt: "Redline snow removal trucks ready for winter in Central Kentucky" }],
   },
 };
 
@@ -17,7 +17,7 @@ export default function SnowRemovalPage() {
       {/* Hero with image — ice/redline accent */}
       <section className="relative w-full aspect-[16/9] md:aspect-[21/9] max-h-[60vh] overflow-hidden">
         <Image
-          src="/images/snow.png"
+          src="/images/snow.jpeg"
           alt="Redline snow plow trucks ready for action"
           fill
           priority
@@ -130,7 +130,7 @@ export default function SnowRemovalPage() {
       {/* Equipment photo break */}
       <section className="relative w-full aspect-[16/9] max-h-[50vh] overflow-hidden">
         <Image
-          src="/images/snow2.png"
+          src="/images/snow2.jpeg"
           alt="Freshly mowed residential lawn"
           fill
           sizes="100vw"
