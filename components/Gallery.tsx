@@ -4,9 +4,19 @@ import { useState, useCallback } from "react";
 import Image from "next/image";
 
 /* ──────────────────────────────────────────────
-   Gallery data — add new images here
+   Types
    ────────────────────────────────────────────── */
-const galleryItems = [
+export interface GalleryItem {
+  src: string;
+  alt: string;
+  title: string;
+  category: string;
+}
+
+/* ──────────────────────────────────────────────
+   Fallback gallery data (used when WP has none)
+   ────────────────────────────────────────────── */
+const fallbackGalleryItems: GalleryItem[] = [
   // Lawn Care
   {
     src: "/images/mowing.jpeg",
@@ -125,7 +135,12 @@ const categories: { label: string; value: Category }[] = [
   { label: "Snow Removal", value: "snow-removal" },
 ];
 
-export default function Gallery() {
+interface GalleryProps {
+  items?: GalleryItem[];
+}
+
+export default function Gallery({ items }: GalleryProps) {
+  const galleryItems = items && items.length > 0 ? items : fallbackGalleryItems;
   const [active, setActive] = useState<Category>("all");
   const [lightbox, setLightbox] = useState<number | null>(null);
 

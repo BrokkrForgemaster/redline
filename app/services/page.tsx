@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { getServicePages } from "@/lib/wordpress";
 
 export const metadata: Metadata = {
   title: "Our Services | Redline Landscaping & Snow Removal",
@@ -11,7 +12,28 @@ export const metadata: Metadata = {
   },
 };
 
-const services = [
+/* ──────────────────────────────────────────────
+   Mapping from WP page slug → site route slug
+   ────────────────────────────────────────────── */
+const wpSlugToRouteSlug: Record<string, string> = {
+  "lawn-care": "lawn-mowing",
+  landscaping: "landscaping",
+  "snow-services": "snow-removal",
+  "aeration-overseeding": "aeration-overseeding",
+};
+
+interface ServiceCard {
+  title: string;
+  slug: string;
+  description: string;
+  features: string[];
+  image: string;
+  accent: string;
+  checkColor: string;
+  buttonClass: string;
+}
+
+const fallbackServices: ServiceCard[] = [
   {
     title: "Lawn Mowing",
     slug: "lawn-mowing",
@@ -78,7 +100,42 @@ const services = [
   },
 ];
 
-export default function ServicesPage() {
+/* Style lookup by route slug */
+const serviceStyles: Record<string, { accent: string; checkColor: string; buttonClass: string; image: string }> = {
+  "lawn-mowing": { accent: "border-lawn", checkColor: "text-lawn", buttonClass: "bg-lawn hover:bg-lawn-dark", image: "/images/mowing1.jpeg" },
+  landscaping: { accent: "border-lawn", checkColor: "text-lawn", buttonClass: "bg-lawn hover:bg-lawn-dark", image: "/images/landscaping.jpeg" },
+  "aeration-overseeding": { accent: "border-lawn", checkColor: "text-lawn", buttonClass: "bg-lawn hover:bg-lawn-dark", image: "/images/aeration.jpeg" },
+  "snow-removal": { accent: "border-redline", checkColor: "text-redline", buttonClass: "bg-redline hover:bg-redline-dark", image: "/images/snow.jpeg" },
+};
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]*>/g, "").trim();
+}
+
+export default async function ServicesPage() {
+  const wpPages = await getServicePages();
+
+  /* Merge WP content into fallback cards when available */
+  let services: ServiceCard[];
+  if (wpPages.length > 0) {
+    services = fallbackServices.map((fallback) => {
+      /* Find matching WP page by mapping WP slug → route slug */
+      const wpPage = wpPages.find(
+        (p) => wpSlugToRouteSlug[p.slug] === fallback.slug
+      );
+      if (!wpPage) return fallback;
+
+      const style = serviceStyles[fallback.slug] || {};
+      return {
+        ...fallback,
+        title: wpPage.title || fallback.title,
+        description: wpPage.excerpt || stripHtml(wpPage.content).slice(0, 200) || fallback.description,
+        image: wpPage.featuredImage || style.image || fallback.image,
+      };
+    });
+  } else {
+    services = fallbackServices;
+  }
   return (
     <>
       {/* Page Header */}

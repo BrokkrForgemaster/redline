@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Gallery from "@/components/Gallery";
+import { getGalleryItems } from "@/lib/wordpress";
 
 export const metadata: Metadata = {
   title: "Gallery | Redline Landscaping & Snow Removal",
@@ -17,7 +18,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function GalleryPage() {
+export default async function GalleryPage() {
+  const wpItems = await getGalleryItems();
   return (
     <>
       {/* Page Header */}
@@ -39,7 +41,7 @@ export default function GalleryPage() {
       {/* Gallery */}
       <section className="bg-white py-16 px-6">
         <div className="max-w-7xl mx-auto">
-          <Gallery />
+          <Gallery items={wpItems.length > 0 ? wpItems : undefined} />
         </div>
       </section>
     </>

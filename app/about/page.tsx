@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { getPageBySlug } from "@/lib/wordpress";
 
 export const metadata: Metadata = {
   title: "About Us | Redline Landscaping & Snow Removal",
@@ -11,7 +12,8 @@ export const metadata: Metadata = {
   },
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const wpAbout = await getPageBySlug("about-us");
   return (
     <>
       {/* Hero */}
@@ -60,29 +62,36 @@ export default function AboutPage() {
                 Founder &amp; Owner
               </p>
 
-              <div className="mt-6 space-y-4 text-muted leading-relaxed">
-                <p>
-                  Ryan is a dedicated firefighter with over 12 years of
-                  experience in the lawn care industry. As the heart of our
-                  family-owned, firefighter-operated business, he brings a unique
-                  perspective and strong commitment to serving both our community
-                  and your outdoor spaces with the utmost care and expertise.
-                </p>
-                <p>
-                  With a passion for the outdoors and a dedication to excellence,
-                  Ryan brings years of industry knowledge and hands-on experience
-                  to every project. Focused on ensuring customer satisfaction, he
-                  takes pride in transforming outdoor spaces through comprehensive
-                  lawn care services, expert landscaping design, and efficient snow
-                  removal operations.
-                </p>
-                <p>
-                  Serving areas including Richmond, Berea, Winchester, Paris,
-                  Somerset and surrounding communities. You can trust Redline to
-                  deliver exceptional service that enhances the beauty and
-                  functionality of your home or business.
-                </p>
-              </div>
+              {wpAbout?.content ? (
+                <div
+                  className="mt-6 space-y-4 text-muted leading-relaxed wp-content"
+                  dangerouslySetInnerHTML={{ __html: wpAbout.content }}
+                />
+              ) : (
+                <div className="mt-6 space-y-4 text-muted leading-relaxed">
+                  <p>
+                    Ryan is a dedicated firefighter with over 12 years of
+                    experience in the lawn care industry. As the heart of our
+                    family-owned, firefighter-operated business, he brings a unique
+                    perspective and strong commitment to serving both our community
+                    and your outdoor spaces with the utmost care and expertise.
+                  </p>
+                  <p>
+                    With a passion for the outdoors and a dedication to excellence,
+                    Ryan brings years of industry knowledge and hands-on experience
+                    to every project. Focused on ensuring customer satisfaction, he
+                    takes pride in transforming outdoor spaces through comprehensive
+                    lawn care services, expert landscaping design, and efficient snow
+                    removal operations.
+                  </p>
+                  <p>
+                    Serving areas including Richmond, Berea, Winchester, Paris,
+                    Somerset and surrounding communities. You can trust Redline to
+                    deliver exceptional service that enhances the beauty and
+                    functionality of your home or business.
+                  </p>
+                </div>
+              )}
 
               {/* Trust badges */}
               <div className="mt-8 flex flex-wrap gap-4">
