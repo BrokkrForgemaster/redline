@@ -24,15 +24,30 @@ export default function ContactPage() {
     };
 
     try {
-      const res = await fetch("/api/contact", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
+      const res = await fetch(
+        "https://formsubmit.co/ajax/68190640042aaa02c784ee90860d79a7",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            name: data.name,
+            email: data.email,
+            phone: data.phone || "Not provided",
+            service: data.service || "Not specified",
+            message: data.message,
+            _subject: `New Quote Request — ${data.service || "General"} — ${data.name}`,
+            _replyto: data.email,
+            _template: "table",
+          }),
+        }
+      );
 
-      if (!res.ok) {
-        const json = await res.json().catch(() => null);
-        throw new Error(json?.error || "Failed to send message.");
+      const json = await res.json().catch(() => null);
+      if (!res.ok || json?.success === "false") {
+        throw new Error("Failed to send message.");
       }
 
       setStatus("success");
