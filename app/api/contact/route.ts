@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 const FORMSUBMIT_URL =
-  "https://formsubmit.co/ajax/redlineofkentucky@gmail.com";
+  "https://formsubmit.co/ajax/68190640042aaa02c784ee90860d79a7";
 
 export async function POST(request: Request) {
   try {
@@ -15,11 +15,15 @@ export async function POST(request: Request) {
       );
     }
 
+    const origin = request.headers.get("origin") || "https://redlinelandscapingky.com";
+
     const res = await fetch(FORMSUBMIT_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        Origin: origin,
+        Referer: origin,
       },
       body: JSON.stringify({
         name,
