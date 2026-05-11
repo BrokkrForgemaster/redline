@@ -10,7 +10,7 @@ export interface GalleryItem {
   src: string;
   alt: string;
   title: string;
-  category: string;
+  categories: string[];
 }
 
 /* ──────────────────────────────────────────────
@@ -22,67 +22,61 @@ const fallbackGalleryItems: GalleryItem[] = [
     src: "/images/mowing.jpeg",
     alt: "Freshly mowed residential lawn with striped pattern",
     title: "Residential Lawn Care",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/mowing1.jpeg",
     alt: "Commercial property with professional mowing stripes",
     title: "Commercial Mowing",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/mowing2.jpeg",
     alt: "Striped lawn in front of residential brick home",
     title: "Residential Striping",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/mowing3.jpeg",
     alt: "Clean mowing stripes on a commercial roadside lot",
     title: "Commercial Roadside Mowing",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/mowing4.jpeg",
     alt: "Freshly mowed residential yard with mature trees",
     title: "Neighborhood Lawn Care",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/mowing5.jpeg",
     alt: "Commercial lot mowing with clean stripes along the road",
     title: "Commercial Lot Maintenance",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/mowing6.jpeg",
     alt: "Large backyard with professional mowing stripes and brick home",
     title: "Large Property Mowing",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/burnside.jpeg",
     alt: "Night shot of baseball field mowing at Burnside",
     title: "Athletic Field Maintenance",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/burnside1.JPG",
     alt: "Aerial view of baseball field mowing patterns",
     title: "Burnside Ball Field",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
   {
     src: "/images/aeration.jpeg",
     alt: "Close-up of lawn aeration plugs",
     title: "Core Aeration",
-    category: "lawn-care",
-  },
-  {
-    src: "/images/aeration.jpeg",
-    alt: "Close-up of soil plugs after core aeration",
-    title: "Aeration Results",
-    category: "lawn-care",
+    categories: ["lawn-care"],
   },
 
   // Landscaping
@@ -90,19 +84,19 @@ const fallbackGalleryItems: GalleryItem[] = [
     src: "/images/landscaping.jpeg",
     alt: "Stone steps, patio, and fire pit hardscaping project",
     title: "Hardscaping & Patio",
-    category: "landscaping",
+    categories: ["landscaping"],
   },
   {
     src: "/images/landscaping1.jpeg",
     alt: "Crew clearing overgrown bamboo and brush",
     title: "Brush & Bamboo Clearing",
-    category: "landscaping",
+    categories: ["landscaping"],
   },
   {
     src: "/images/landscaping2.jpeg",
     alt: "Large bamboo and brush removal project in progress",
     title: "Land Clearing",
-    category: "landscaping",
+    categories: ["landscaping"],
   },
 
   // Snow Removal
@@ -110,25 +104,25 @@ const fallbackGalleryItems: GalleryItem[] = [
     src: "/images/snow.jpeg",
     alt: "Red Chevy trucks equipped with Western snow plows",
     title: "Snow Plow Fleet",
-    category: "snow-removal",
+    categories: ["snow-removal"],
   },
   {
     src: "/images/snow2.jpeg",
     alt: "Trucks with SnowEx salt spreaders ready for winter",
     title: "Salt & Ice Management",
-    category: "snow-removal",
+    categories: ["snow-removal"],
   },
   {
     src: "/images/snow3.jpeg",
     alt: "Red Chevy truck with Western plow ready for snow removal",
     title: "Plow Truck Ready",
-    category: "snow-removal",
+    categories: ["snow-removal"],
   },
 ];
 
 type Category = "all" | "lawn-care" | "landscaping" | "snow-removal";
 
-const categories: { label: string; value: Category }[] = [
+const categoriesList: { label: string; value: Category }[] = [
   { label: "All", value: "all" },
   { label: "Lawn Care", value: "lawn-care" },
   { label: "Landscaping", value: "landscaping" },
@@ -147,7 +141,7 @@ export default function Gallery({ items }: GalleryProps) {
   const filtered =
     active === "all"
       ? galleryItems
-      : galleryItems.filter((item) => item.category === active);
+      : galleryItems.filter((item) => item.categories.includes(active));
 
   const openLightbox = useCallback((index: number) => setLightbox(index), []);
   const closeLightbox = useCallback(() => setLightbox(null), []);
@@ -168,7 +162,7 @@ export default function Gallery({ items }: GalleryProps) {
     <>
       {/* Category Filter Tabs */}
       <div className="flex flex-wrap justify-center gap-3 mb-12">
-        {categories.map((cat) => (
+        {categoriesList.map((cat) => (
           <button
             key={cat.value}
             onClick={() => {
@@ -190,7 +184,7 @@ export default function Gallery({ items }: GalleryProps) {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtered.map((item, i) => (
           <button
-            key={item.src}
+            key={item.src + i}
             onClick={() => openLightbox(i)}
             className="group relative aspect-[4/3] rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.02] animate-fade-in-up cursor-pointer"
             style={{ animationDelay: `${i * 80}ms` }}
@@ -207,7 +201,7 @@ export default function Gallery({ items }: GalleryProps) {
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-charcoal/80 to-transparent p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
               <p className="text-white font-semibold text-sm">{item.title}</p>
               <p className="text-gray-300 text-xs capitalize">
-                {item.category.replace("-", " ")}
+                {item.categories.join(", ").replace(/-/g, " ")}
               </p>
             </div>
           </button>
@@ -275,7 +269,7 @@ export default function Gallery({ items }: GalleryProps) {
           >
             <p className="text-white font-semibold">{filtered[lightbox].title}</p>
             <p className="text-gray-400 text-sm capitalize">
-              {filtered[lightbox].category.replace("-", " ")}
+              {filtered[lightbox].categories.join(", ").replace(/-/g, " ")}
             </p>
           </div>
         </div>

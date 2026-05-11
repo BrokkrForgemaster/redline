@@ -34,7 +34,7 @@ export interface WPGalleryItem {
   src: string;
   alt: string;
   title: string;
-  category: string;
+  categories: string[];
 }
 
 /* ──────────────────────────────────────────────
@@ -201,12 +201,17 @@ export async function getPageBySlug(slug: string): Promise<WPPage | null> {
 }
 
 /* ──────────────────────────────────────────────
-   Gallery items from "Gallery" category posts
+   Gallery items
    ──────────────────────────────────────────────
-   WordPress setup:
+   WordPress setup (Recommended):
+   1. Register a Custom Post Type "gallery"
+   2. Register a Custom Taxonomy "gallery_category"
+   3. Add items with Featured Images and Categories
+
+   Fallback setup:
    1. Create a category called "Gallery"
    2. Add a post for each photo:
-      - Title = caption (e.g. "Residential Lawn Striping")
+      - Title = caption
       - Featured Image = the photo
       - Category = Gallery
       - Tag = lawn-care, landscaping, or snow-removal
@@ -214,16 +219,28 @@ export async function getPageBySlug(slug: string): Promise<WPPage | null> {
 
 export async function getGalleryItems(): Promise<WPGalleryItem[]> {
   try {
-    const catId = await getCategoryId("gallery");
-    if (!catId) return [];
-
-    const res = await fetch(
-      `${WP_API_URL}/posts?categories=${catId}&per_page=100&_embed&orderby=date&order=desc`,
+    // 1. Try Custom Post Type 'gallery' first
+    let res = await fetch(
+      `${WP_API_URL}/gallery?per_page=100&_embed&orderby=date&order=desc`,
       { next: { revalidate: 3600 } }
     );
+
+    // 2. Fallback to 'posts' in 'gallery' category if CPT doesn't exist or is empty
+    if (!res.ok) {
+      const catId = await getCategoryId("gallery");
+      if (catId) {
+        res = await fetch(
+          `${WP_API_URL}/posts?categories=${catId}&per_page=100&_embed&orderby=date&order=desc`,
+          { next: { revalidate: 3600 } }
+        );
+      }
+    }
+
     if (!res.ok) return [];
 
     const posts = await res.json();
+    if (!Array.isArray(posts)) return [];
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return posts
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -236,16 +253,22 @@ export async function getGalleryItems(): Promise<WPGalleryItem[]> {
           post._embedded["wp:featuredmedia"][0].alt_text ||
           stripHtml(post.title?.rendered || "");
 
-        // Use first tag slug as category, default to "lawn-care"
-        const tags: { slug: string }[] =
-          post._embedded?.["wp:term"]?.[1] || [];
-        const category = tags[0]?.slug || "lawn-care";
+        // Collect all tags or custom taxonomy terms
+        // Index 1 is usually tags for posts, but for custom post types it depends on registration order
+        // We look through all wp:term arrays
+        const terms: { slug: string }[] = post._embedded?.["wp:term"]?.flat() || [];
+        const categories = terms
+          .map((t: { slug: string }) => t.slug)
+          .filter((slug) => slug !== "gallery"); // exclude the 'gallery' category itself
+
+        // Default to lawn-care if no relevant tags found
+        const finalCategories = categories.length > 0 ? categories : ["lawn-care"];
 
         return {
           src: imageUrl,
           alt: altText,
           title: stripHtml(post.title?.rendered || ""),
-          category,
+          categories: finalCategories,
         };
       });
   } catch {
