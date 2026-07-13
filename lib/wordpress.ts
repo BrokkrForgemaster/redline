@@ -1,6 +1,9 @@
+const WP_BASE_URL =
+  process.env.WORDPRESS_BASE_URL || "https://cms.redlinelandscapingky.com";
+
 const WP_API_URL =
   process.env.WORDPRESS_API_URL ||
-  "https://redlinelandscapingky.com/wp-json/wp/v2";
+  `${WP_BASE_URL.replace(/\/$/, "")}/wp-json/wp/v2`;
 
 /* ──────────────────────────────────────────────
    Types

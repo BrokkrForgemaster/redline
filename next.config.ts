@@ -1,11 +1,15 @@
 import type { NextConfig } from "next";
 
+const wordpressBaseUrl =
+  process.env.WORDPRESS_BASE_URL || "https://cms.redlinelandscapingky.com";
+const wordpressUploadsHost = new URL(wordpressBaseUrl).hostname;
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "redlinelandscapingky.com",
+        hostname: wordpressUploadsHost,
         pathname: "/wp-content/uploads/**",
       },
       {

@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Environment
+
+For headless WordPress content, set:
+
+```bash
+WORDPRESS_BASE_URL=https://cms.redlinelandscapingky.com
+```
+
+The app derives the REST API endpoint and allowed WordPress uploads host from that single value.
+
 ## Getting Started
 
 First, run the development server:
