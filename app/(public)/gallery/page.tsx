@@ -71,7 +71,7 @@ export default async function GalleryPage() {
     getSupabaseGalleryItems(),
   ]);
 
-  const items = wpItems.length > 0 ? wpItems : supabaseItems.length > 0 ? supabaseItems : undefined;
+  const items = supabaseItems.length > 0 ? supabaseItems : wpItems.length > 0 ? wpItems : undefined;
 
   return (
     <>

@@ -190,21 +190,32 @@ export default function Sidebar({ profile, mobile, onClose }: Props) {
 
       {/* User footer */}
       <div className="px-4 py-4 border-t border-white/10 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-redline flex items-center justify-center flex-shrink-0">
-            <span className="text-white text-xs font-bold">
-              {profile.first_name[0]}{profile.last_name[0]}
-            </span>
+        <Link href="/settings/profile" className="flex items-center gap-3 group">
+          <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0">
+            {profile.avatar_url ? (
+              <Image
+                src={profile.avatar_url}
+                alt={`${profile.first_name} ${profile.last_name}`}
+                fill
+                className="object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-redline flex items-center justify-center">
+                <span className="text-white text-xs font-bold">
+                  {profile.first_name[0]}{profile.last_name[0]}
+                </span>
+              </div>
+            )}
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-medium text-white truncate">
+            <p className="text-sm font-medium text-white truncate group-hover:text-redline/90 transition-colors">
               {profile.first_name} {profile.last_name}
             </p>
             <p className="text-xs text-gray-400 truncate capitalize">
               {profile.role.replace(/_/g, " ")}
             </p>
           </div>
-        </div>
+        </Link>
       </div>
     </aside>
   );

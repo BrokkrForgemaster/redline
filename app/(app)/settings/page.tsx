@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Building2, Shield, Bell, Users, DollarSign, Palette } from "lucide-react";
+import { Building2, Shield, Bell, Users, DollarSign, Palette, UserCircle } from "lucide-react";
 
 export const metadata = { title: "Settings" };
 
@@ -16,6 +16,7 @@ export default async function SettingsPage() {
   const { data: settings } = await supabase.from("business_settings").select("*").single();
 
   const sections = [
+    { icon: UserCircle, label: "My Profile", description: "Name, photo, phone number", href: "/settings/profile", adminOnly: false },
     { icon: Building2, label: "Business Information", description: "Name, address, logo, tax ID", href: "/settings/business", adminOnly: true },
     { icon: Palette, label: "Branding & PDFs", description: "Logo, colors, PDF footer, terms", href: "/settings/branding", adminOnly: true },
     { icon: DollarSign, label: "Invoicing & Taxes", description: "Tax rates, payment terms, prefixes", href: "/settings/invoicing", adminOnly: true },
