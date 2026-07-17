@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npx next build:*)"
+      "Bash(npx next build:*)",
+      "Bash(npm install *)",
+      "Bash(mkdir -p B:/redline/app/\\\\\\(auth\\\\\\)/login B:/redline/app/\\\\\\(auth\\\\\\)/signup B:/redline/app/\\\\\\(auth\\\\\\)/forgot-password B:/redline/app/\\\\\\(auth\\\\\\)/reset-password B:/redline/app/\\\\\\(auth\\\\\\)/verify-email B:/redline/app/\\\\\\(auth\\\\\\)/mfa)",
+      "Bash(mkdir -p B:/redline/app/\\\\\\(app\\\\\\)/dashboard B:/redline/app/\\\\\\(app\\\\\\)/leads B:/redline/app/\\\\\\(app\\\\\\)/customers B:/redline/app/\\\\\\(app\\\\\\)/properties B:/redline/app/\\\\\\(app\\\\\\)/estimates B:/redline/app/\\\\\\(app\\\\\\)/contracts)",
+      "Bash(mkdir -p B:/redline/app/\\\\\\(app\\\\\\)/jobs B:/redline/app/\\\\\\(app\\\\\\)/calendar B:/redline/app/\\\\\\(app\\\\\\)/snow-events B:/redline/app/\\\\\\(app\\\\\\)/routes B:/redline/app/\\\\\\(app\\\\\\)/invoices B:/redline/app/\\\\\\(app\\\\\\)/payments)",
+      "Bash(mkdir -p B:/redline/app/\\\\\\(app\\\\\\)/inventory B:/redline/app/\\\\\\(app\\\\\\)/equipment B:/redline/app/\\\\\\(app\\\\\\)/vehicles B:/redline/app/\\\\\\(app\\\\\\)/suppliers B:/redline/app/\\\\\\(app\\\\\\)/purchase-orders)",
+      "Bash(mkdir -p B:/redline/app/\\\\\\(app\\\\\\)/employees B:/redline/app/\\\\\\(app\\\\\\)/crews B:/redline/app/\\\\\\(app\\\\\\)/time-tracking B:/redline/app/\\\\\\(app\\\\\\)/gallery B:/redline/app/\\\\\\(app\\\\\\)/reports B:/redline/app/\\\\\\(app\\\\\\)/settings B:/redline/app/\\\\\\(app\\\\\\)/audit-logs)",
+      "PowerShell(cmd /c \"dir /b /s B:\\\\redline\\\\app\\\\\\(public\\)\" 2>&1)",
+      "PowerShell(cmd /c \"dir /b B:\\\\redline\\\\app\\\\\\(public\\)\" 2>&1)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:v for k,v in d.get\\('dependencies',{}\\).items\\(\\)}, indent=2\\)\\)\")",
+      "Bash(npx tsc *)",
+      "Bash(node *)"
     ]
   }
 }

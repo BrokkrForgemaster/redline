@@ -1,0 +1,22 @@
+{
+  "name": "Redline Landscaping & Snow Removal",
+  "short_name": "Redline",
+  "description": "Professional business management for Redline Landscaping & Snow Removal",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#B11226",
+  "background_color": "#1F1F1F",
+  "icons": [
+    {
+      "src": "/images/logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false
+}

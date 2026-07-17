@@ -61,6 +61,12 @@ export default function Header() {
             </Link>
             <span className="w-px h-6 bg-gray-600 mx-2" />
             <Link
+              href="/login"
+              className="text-base font-semibold text-gray-400 px-4 py-2 rounded-md hover:bg-white/10 hover:text-white transition-all duration-200 text-sm"
+            >
+              Staff Login
+            </Link>
+            <Link
               href="/contact"
               className="bg-redline text-white text-base font-bold uppercase tracking-wide px-7 py-2.5 rounded-md hover:bg-redline-dark transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5"
             >

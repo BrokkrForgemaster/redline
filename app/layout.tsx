@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 
 const siteUrl = (
     process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3001"
@@ -165,6 +163,17 @@ export default function RootLayout({
   return (
       <html lang="en">
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#B11226" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Redline" />
+        <link rel="apple-touch-icon" href="/images/logo.png" />
+        <script
+            dangerouslySetInnerHTML={{
+              __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});})}`,
+            }}
+        />
         <script
             async
             src="https://www.googletagmanager.com/gtag/js?id=GT-T5MRJWHC"
@@ -192,9 +201,7 @@ export default function RootLayout({
       </head>
 
       <body className="min-h-screen flex flex-col">
-      <Header />
-      <main className="flex-1">{children}</main>
-      <Footer />
+      {children}
       </body>
       </html>
   );
