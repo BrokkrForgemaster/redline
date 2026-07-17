@@ -177,9 +177,16 @@ export default function JobForm({ customers, crews }: Props) {
         <h2 className="font-semibold text-charcoal">Scheduling</h2>
 
         <div>
-          <label className={labelClass}>Crew</label>
-          <select {...register("crewId")} className={fieldClass}>
-            <option value="">Unassigned</option>
+          <div className="flex items-center justify-between mb-1">
+            <label className={labelClass} style={{ marginBottom: 0 }}>Crew</label>
+            {crews.length === 0 && (
+              <a href="/crews/new" target="_blank" rel="noopener noreferrer" className="text-xs text-redline hover:underline">
+                + Create a crew first
+              </a>
+            )}
+          </div>
+          <select {...register("crewId")} className={fieldClass} disabled={crews.length === 0}>
+            <option value="">{crews.length === 0 ? "No crews yet — create one first" : "Unassigned"}</option>
             {crews.map(c => (
               <option key={c.id} value={c.id}>{c.name}</option>
             ))}
