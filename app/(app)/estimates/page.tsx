@@ -74,7 +74,7 @@ export default async function EstimatesPage({
             <tbody className="divide-y divide-gray-50">
               {estimates.map(est => {
                 const badge = estimateStatusBadge(est.status);
-                const customer = est.customers as Record<string, unknown> | null;
+                const customer = est.customers as unknown as Record<string, unknown> | null;
                 return (
                   <tr key={est.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">
@@ -82,7 +82,7 @@ export default async function EstimatesPage({
                     </td>
                     <td className="px-5 py-3 text-muted">
                       {customer ? `${customer.first_name} ${customer.last_name}` : "—"}
-                      {customer?.business_name && <span className="block text-xs">{customer.business_name as string}</span>}
+                      {customer?.business_name ? <span className="block text-xs">{customer.business_name as string}</span> : null}
                     </td>
                     <td className="px-5 py-3 text-charcoal hidden md:table-cell">{est.title}</td>
                     <td className="px-5 py-3"><StatusBadge label={badge.label} variant={badge.variant} /></td>

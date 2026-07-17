@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -33,7 +33,7 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<PropertyInput>({
-    resolver: zodResolver(propertySchema),
+    resolver: zodResolver(propertySchema) as unknown as Resolver<PropertyInput>,
     defaultValues: {
       customerId: defaultCustomerId ?? "",
       propertyType: "residential",

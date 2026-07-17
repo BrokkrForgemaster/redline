@@ -160,11 +160,11 @@ export default async function TimeTrackingPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {entries.map((entry) => {
-                  const employee = entry.profiles as {
+                  const employee = entry.profiles as unknown as {
                     first_name: string;
                     last_name: string;
                   } | null;
-                  const job = entry.jobs as {
+                  const job = entry.jobs as unknown as {
                     job_number: string;
                     title: string;
                   } | null;

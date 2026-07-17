@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -64,7 +64,7 @@ export default function JobForm({ customers, crews }: Props) {
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<JobInput>({
-    resolver: zodResolver(jobSchema),
+    resolver: zodResolver(jobSchema) as unknown as Resolver<JobInput>,
     defaultValues: {
       priority: "normal",
       isRecurring: false,

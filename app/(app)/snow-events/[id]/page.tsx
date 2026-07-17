@@ -214,7 +214,7 @@ export default async function SnowEventDetailPage({ params }: { params: Promise<
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {routes.map(route => {
-                    const crew = route.crews as { name: string } | null;
+                    const crew = route.crews as unknown as { name: string } | null;
                     return (
                       <tr key={route.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-5 py-3">

@@ -125,7 +125,7 @@ export default async function RoutesPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {routes.map((route) => {
-                  const crew = route.crews as { name: string } | null;
+                  const crew = route.crews as unknown as { name: string } | null;
                   const badge = routeStatusBadge(route.status);
                   return (
                     <tr key={route.id} className="hover:bg-gray-50 transition-colors">

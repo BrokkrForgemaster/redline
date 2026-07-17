@@ -112,7 +112,7 @@ export default async function PropertiesPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {properties.map((property) => {
-                  const customer = property.customers as { first_name: string; last_name: string } | null;
+                  const customer = property.customers as unknown as { first_name: string; last_name: string } | null;
                   return (
                     <tr key={property.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-5 py-3">

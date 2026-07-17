@@ -128,7 +128,7 @@ export default async function PurchaseOrdersPage({
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {orders.map((order) => {
-                  const supplier = order.suppliers as { company_name: string } | null;
+                  const supplier = order.suppliers as unknown as { company_name: string } | null;
                   const badge = poStatusBadge(order.status);
                   return (
                     <tr key={order.id} className="hover:bg-gray-50 transition-colors">

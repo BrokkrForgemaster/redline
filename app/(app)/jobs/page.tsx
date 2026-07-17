@@ -72,8 +72,8 @@ export default async function JobsPage({
             <tbody className="divide-y divide-gray-50">
               {jobs.map(job => {
                 const badge = jobStatusBadge(job.status);
-                const customer = job.customers as Record<string, unknown> | null;
-                const crew = job.crews as Record<string, unknown> | null;
+                const customer = job.customers as unknown as Record<string, unknown> | null;
+                const crew = job.crews as unknown as Record<string, unknown> | null;
                 return (
                   <tr key={job.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">

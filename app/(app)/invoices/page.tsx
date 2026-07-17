@@ -67,7 +67,7 @@ export default async function InvoicesPage({
             <tbody className="divide-y divide-gray-50">
               {invoices.map(inv => {
                 const badge = invoiceStatusBadge(inv.status);
-                const customer = inv.customers as Record<string, unknown> | null;
+                const customer = inv.customers as unknown as Record<string, unknown> | null;
                 return (
                   <tr key={inv.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">

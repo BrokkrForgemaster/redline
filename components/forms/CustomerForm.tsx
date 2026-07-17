@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -29,7 +29,7 @@ export default function CustomerForm({ customer }: Props) {
     watch,
     formState: { errors, isSubmitting },
   } = useForm<CustomerInput>({
-    resolver: zodResolver(customerSchema),
+    resolver: zodResolver(customerSchema) as unknown as Resolver<CustomerInput>,
     defaultValues: customer ? {
       accountType: customer.account_type as "individual" | "business",
       firstName: customer.first_name,

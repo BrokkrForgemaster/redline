@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -48,7 +48,7 @@ export default function LeadForm() {
     setValue,
     formState: { errors, isSubmitting },
   } = useForm<LeadFormData>({
-    resolver: zodResolver(leadSchema),
+    resolver: zodResolver(leadSchema) as unknown as Resolver<LeadFormData>,
     defaultValues: {
       source: "",
       requestedServices: [],

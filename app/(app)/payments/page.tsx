@@ -117,13 +117,13 @@ export default async function PaymentsPage({
             </thead>
             <tbody className="divide-y divide-gray-50">
               {payments.map((payment) => {
-                const customer = payment.customers as {
+                const customer = payment.customers as unknown as {
                   id: string;
                   first_name: string;
                   last_name: string;
                   business_name: string | null;
                 } | null;
-                const invoice = payment.invoices as {
+                const invoice = payment.invoices as unknown as {
                   id: string;
                   invoice_number: string;
                 } | null;

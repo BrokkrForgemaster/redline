@@ -71,9 +71,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
       .order("clock_in", { ascending: false }),
   ]);
 
-  const customer = job.customers as { id: string; first_name: string; last_name: string; business_name: string | null; account_type: string } | null;
-  const property = job.properties as { id: string; address_line1: string; city: string; state: string; property_name: string | null } | null;
-  const crew = job.crews as { id: string; name: string } | null;
+  const customer = job.customers as unknown as { id: string; first_name: string; last_name: string; business_name: string | null; account_type: string } | null;
+  const property = job.properties as unknown as { id: string; address_line1: string; city: string; state: string; property_name: string | null } | null;
+  const crew = job.crews as unknown as { id: string; name: string } | null;
 
   const badge = jobStatusBadge(job.status);
   const nextStatuses = JOB_STATUS_TRANSITIONS[job.status] ?? [];
@@ -195,7 +195,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 <p className="text-muted text-xs uppercase font-semibold tracking-wide mb-2">Assigned Employees</p>
                 <div className="flex flex-wrap gap-2">
                   {assignments.map(a => {
-                    const profile = a.profiles as { first_name: string; last_name: string } | null;
+                    const profile = a.profiles as unknown as { first_name: string; last_name: string } | null;
                     return (
                       <span key={a.id} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-charcoal text-xs font-medium rounded-full">
                         <User size={11} />
@@ -253,7 +253,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {timeEntries.map(entry => {
-                    const profile = entry.profiles as { first_name: string; last_name: string } | null;
+                    const profile = entry.profiles as unknown as { first_name: string; last_name: string } | null;
                     return (
                       <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-5 py-3 text-charcoal">
