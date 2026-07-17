@@ -9,7 +9,7 @@ import {
   LayoutDashboard, Users, Building2, FileText, ClipboardList,
   Calendar, Snowflake, MapPin, Receipt, Package, Truck, Store,
   ShoppingCart, UserCog, Users2, Clock, Image as ImageIcon,
-  BarChart3, Settings, Shield, X, ChevronDown
+  BarChart3, Settings, Shield, X, ChevronDown, Briefcase
 } from "lucide-react";
 import { useState } from "react";
 
@@ -23,6 +23,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "My Jobs", href: "/my-jobs", icon: Briefcase },
   { label: "Leads", href: "/leads", icon: ClipboardList, roles: ["owner","administrator","operations_manager","office_manager","estimator"] },
   { label: "Customers", href: "/customers", icon: Users },
   { label: "Properties", href: "/properties", icon: Building2 },
