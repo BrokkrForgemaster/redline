@@ -14,7 +14,10 @@
       "Bash(npx tsc *)",
       "Bash(node *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "PowerShell(cd B:\\\\redline; $env:NODE_OPTIONS=\"--max-old-space-size=4096\"; $env:NEXT_PRIVATE_BUILD_WORKER_COUNT=\"1\"; npx tsc --noEmit 2>&1 | Select-Object -Last 30)",
+      "PowerShell(Get-PSDrive B | Select-Object Name, @{N='Used GB';E={[math]::Round\\($_.Used/1GB,2\\)}}, @{N='Free GB';E={[math]::Round\\($_.Free/1GB,2\\)}}, @{N='Total GB';E={[math]::Round\\(\\($_.Used+$_.Free\\)/1GB,2\\)}})",
+      "mcp__claude_ai_Claude_Docs__update"
     ]
   }
 }
