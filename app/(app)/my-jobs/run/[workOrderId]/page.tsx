@@ -869,20 +869,9 @@ function PhotoSection({ label, hint, count, uploading, inputRef, disabled, onCha
       ? "border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
       : "border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700";
 
-  async function openCameraInput() {
+  function openCameraInput() {
     if (disabled || uploading || !inputRef.current) return;
-    if (!navigator.mediaDevices?.getUserMedia) {
-      toast.error("A camera is required to take job photos on this device.");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
-      stream.getTracks().forEach((track) => track.stop());
-      inputRef.current.click();
-    } catch {
-      toast.error("Camera access is required to take a new job photo.");
-    }
+    inputRef.current.click();
   }
 
   return (

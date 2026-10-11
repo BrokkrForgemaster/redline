@@ -210,20 +210,9 @@ export default function FieldJobView({
     e.target.value = "";
   }
 
-  async function openCameraInput(input: HTMLInputElement | null) {
+  function openCameraInput(input: HTMLInputElement | null) {
     if (!input || isUploading) return;
-    if (!navigator.mediaDevices?.getUserMedia) {
-      toast.error("A camera is required to take job photos on this device.");
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
-      stream.getTracks().forEach((track) => track.stop());
-      input.click();
-    } catch {
-      toast.error("Camera access is required to take a new job photo.");
-    }
+    input.click();
   }
 
   return (
