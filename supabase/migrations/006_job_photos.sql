@@ -61,12 +61,12 @@ VALUES (
   'job-photos',
   'job-photos',
   true,
-  15728640,
+  26214400,
   ARRAY['image/jpeg','image/png','image/webp','image/heic','image/heif']
 )
 ON CONFLICT (id) DO UPDATE
   SET public = true,
-      file_size_limit = 15728640,
+      file_size_limit = 26214400,
       allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/heic','image/heif'];
 
 DROP POLICY IF EXISTS "Public can view job photos storage" ON storage.objects;

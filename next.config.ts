@@ -9,7 +9,7 @@ const supabaseHost = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "https://pl
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "25mb",
     },
   },
   images: {

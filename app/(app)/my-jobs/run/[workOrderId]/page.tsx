@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   ArrowLeft, MapPin, Clock, AlertTriangle, Loader2,
   PlayCircle, PauseCircle, CheckCircle2, Send,
-  Navigation, Camera, ChevronDown, ChevronUp,
+  Navigation, Camera, ChevronDown, ChevronUp, Upload,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useGps } from "@/lib/field/useGps";
@@ -93,7 +93,9 @@ export default function ServiceRunPage() {
   const checklistSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const beforeRef = useRef<HTMLInputElement>(null);
+  const beforeUploadRef = useRef<HTMLInputElement>(null);
   const afterRef = useRef<HTMLInputElement>(null);
+  const afterUploadRef = useRef<HTMLInputElement>(null);
 
   // Live timer
   useEffect(() => {
@@ -684,6 +686,7 @@ export default function ServiceRunPage() {
               count={run.beforeCount}
               uploading={photos.uploading}
               inputRef={beforeRef}
+              uploadInputRef={beforeUploadRef}
               disabled={photos.uploading || !run.serviceRunId}
               onChange={(e) => handlePhotoChange(e, "before")}
             />
@@ -766,6 +769,7 @@ export default function ServiceRunPage() {
               count={run.afterCount}
               uploading={photos.uploading}
               inputRef={afterRef}
+              uploadInputRef={afterUploadRef}
               disabled={photos.uploading || !run.serviceRunId}
               onChange={(e) => handlePhotoChange(e, "after")}
               accent="blue"
@@ -855,12 +859,23 @@ interface PhotoSectionProps {
   count: number;
   uploading: boolean;
   inputRef: React.RefObject<HTMLInputElement | null>;
+  uploadInputRef: React.RefObject<HTMLInputElement | null>;
   disabled: boolean;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   accent?: "amber" | "blue";
 }
 
-function PhotoSection({ label, hint, count, uploading, inputRef, disabled, onChange, accent = "amber" }: PhotoSectionProps) {
+function PhotoSection({
+  label,
+  hint,
+  count,
+  uploading,
+  inputRef,
+  uploadInputRef,
+  disabled,
+  onChange,
+  accent = "amber",
+}: PhotoSectionProps) {
   const met = count >= MIN_PHOTOS;
 
   const addBtnCls = met
@@ -869,9 +884,9 @@ function PhotoSection({ label, hint, count, uploading, inputRef, disabled, onCha
       ? "border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
       : "border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700";
 
-  function openCameraInput() {
-    if (disabled || uploading || !inputRef.current) return;
-    inputRef.current.click();
+  function openPhotoInput(ref: React.RefObject<HTMLInputElement | null>) {
+    if (disabled || uploading || !ref.current) return;
+    ref.current.click();
   }
 
   return (
@@ -914,24 +929,45 @@ function PhotoSection({ label, hint, count, uploading, inputRef, disabled, onCha
         )}
       </div>
 
-      {/* Add photo button */}
+      {/* Add photo buttons */}
       <div className={disabled ? "opacity-50" : ""}>
-        <button
-          type="button"
-          onClick={openCameraInput}
-          disabled={disabled || uploading}
-          className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border transition-colors ${addBtnCls}`}
-        >
-          {uploading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
-          <span className="text-sm font-semibold">
-            {uploading ? "Uploading…" : met ? "Add More Photos" : `Take ${label.split(" ")[0]} Photo`}
-          </span>
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => openPhotoInput(inputRef)}
+            disabled={disabled || uploading}
+            className={`flex items-center justify-center gap-2 py-3 rounded-xl border transition-colors ${addBtnCls}`}
+          >
+            {uploading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+            <span className="text-sm font-semibold">
+              {uploading ? "Uploading..." : met ? "Take More" : "Take Photo"}
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openPhotoInput(uploadInputRef)}
+            disabled={disabled || uploading}
+            className="flex items-center justify-center gap-2 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors"
+          >
+            {uploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+            <span className="text-sm font-semibold">
+              {uploading ? "Uploading..." : met ? "Upload More" : "Upload Photo"}
+            </span>
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
           capture="environment"
+          className="hidden"
+          onChange={onChange}
+          disabled={disabled}
+        />
+        <input
+          ref={uploadInputRef}
+          type="file"
+          accept="image/*"
           className="hidden"
           onChange={onChange}
           disabled={disabled}

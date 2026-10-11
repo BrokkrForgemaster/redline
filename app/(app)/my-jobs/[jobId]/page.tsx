@@ -50,12 +50,14 @@ export default async function FieldJobPage({
     .limit(1)
     .maybeSingle();
 
-  // Photo counts
-  const [{ count: beforeCount }, { count: afterCount }] = await Promise.all([
+  // Photo counts and manually tagged job location
+  const [{ count: beforeCount }, { count: afterCount }, { count: manualLocationTagCount }] = await Promise.all([
     sb.from("job_photos").select("id", { count: "exact", head: true })
       .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "before"),
     sb.from("job_photos").select("id", { count: "exact", head: true })
       .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "after"),
+    sb.from("job_location_tags").select("id", { count: "exact", head: true })
+      .eq("job_id", jobId).eq("employee_id", user.id).eq("tag_type", "manual"),
   ]);
 
   return (
@@ -65,6 +67,7 @@ export default async function FieldJobPage({
       completedEntry={completedEntry ?? null}
       beforeCount={beforeCount ?? 0}
       afterCount={afterCount ?? 0}
+      locationTagged={!!manualLocationTagCount}
     />
   );
 }

@@ -6,13 +6,17 @@ import Link from "next/link";
 import { toast } from "sonner";
 import {
   ArrowLeft, MapPin, Clock, Camera, CheckCircle2,
-  Loader2, PlayCircle, StopCircle, AlertTriangle,
+  Loader2, PlayCircle, StopCircle, AlertTriangle, Upload,
 } from "lucide-react";
 import { clockIn, clockOut, tagJobLocation, uploadJobPhoto } from "@/lib/actions/field";
 import { type GpsLocation, useGps } from "@/lib/field/useGps";
 
 const BEFORE_REQUIRED = 3;
 const AFTER_REQUIRED = 3;
+const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
+const PHOTO_TARGET_BYTES = 8 * 1024 * 1024;
+const PHOTO_MAX_DIMENSION = 1800;
+const PHOTO_JPEG_QUALITY = 0.82;
 
 interface Job {
   id: string;
@@ -40,6 +44,7 @@ interface Props {
   completedEntry: TimeEntry | null;
   beforeCount: number;
   afterCount: number;
+  locationTagged: boolean;
 }
 
 const SERVICE_LABELS: Record<string, string> = {
@@ -70,6 +75,53 @@ function formatMinutes(mins: number | null | undefined) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function loadImageFromFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Unable to read image"));
+    };
+    img.src = url;
+  });
+}
+
+async function preparePhotoForUpload(file: File) {
+  if (!file.type.startsWith("image/")) return file;
+
+  try {
+    const img = await loadImageFromFile(file);
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1 && file.size <= PHOTO_TARGET_BYTES) return file;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY);
+    });
+    if (!blob || blob.size >= file.size) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
+    return new File([blob], `${baseName}.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  }
+}
+
 function PhotoCounter({ count, required }: { count: number; required: number }) {
   const met = count >= required;
   return (
@@ -91,7 +143,7 @@ function PhotoCounter({ count, required }: { count: number; required: number }) 
 }
 
 export default function FieldJobView({
-  job, activeEntry, completedEntry, beforeCount, afterCount,
+  job, activeEntry, completedEntry, beforeCount, afterCount, locationTagged,
 }: Props) {
   const router = useRouter();
   const [isClocking, startClockTransition] = useTransition();
@@ -99,8 +151,11 @@ export default function FieldJobView({
   const [elapsed, setElapsed] = useState(0);
   const [localBefore, setLocalBefore] = useState(beforeCount);
   const [localAfter, setLocalAfter] = useState(afterCount);
-  const beforeRef = useRef<HTMLInputElement>(null);
-  const afterRef = useRef<HTMLInputElement>(null);
+  const [isLocationTagged, setIsLocationTagged] = useState(locationTagged);
+  const beforeCameraRef = useRef<HTMLInputElement>(null);
+  const beforeUploadRef = useRef<HTMLInputElement>(null);
+  const afterCameraRef = useRef<HTMLInputElement>(null);
+  const afterUploadRef = useRef<HTMLInputElement>(null);
   const gps = useGps();
 
   useEffect(() => {
@@ -151,7 +206,10 @@ export default function FieldJobView({
       appendGps(fd, loc);
       const result = await tagJobLocation(fd, job.id);
       if (result.error) toast.error(result.error);
-      else toast.success("Location tagged to this job.");
+      else {
+        setIsLocationTagged(true);
+        toast.success("Location tagged to this job.");
+      }
     });
   }
 
@@ -192,9 +250,15 @@ export default function FieldJobView({
     startUploadTransition(async () => {
       let saved = 0;
       for (const file of files) {
+        const uploadFile = await preparePhotoForUpload(file);
+        if (uploadFile.size > MAX_UPLOAD_BYTES) {
+          toast.error("Photo is too large to upload. Retake it at a lower resolution or choose a smaller image.");
+          continue;
+        }
+
         const loc = await gps.acquire();
         const fd = new FormData();
-        fd.append("file", file);
+        fd.append("file", uploadFile);
         appendGps(fd, loc);
         const result = await uploadJobPhoto(fd, job.id, type);
         if (result.url) saved++;
@@ -210,7 +274,7 @@ export default function FieldJobView({
     e.target.value = "";
   }
 
-  function openCameraInput(input: HTMLInputElement | null) {
+  function openPhotoInput(input: HTMLInputElement | null) {
     if (!input || isUploading) return;
     input.click();
   }
@@ -218,7 +282,7 @@ export default function FieldJobView({
   return (
     <div className="max-w-lg mx-auto space-y-4 pb-28">
       <input
-        ref={beforeRef}
+        ref={beforeCameraRef}
         type="file"
         accept="image/*"
         capture="environment"
@@ -227,10 +291,26 @@ export default function FieldJobView({
         disabled={isUploading}
       />
       <input
-        ref={afterRef}
+        ref={beforeUploadRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => handlePhotoChange(e, "before")}
+        disabled={isUploading}
+      />
+      <input
+        ref={afterCameraRef}
         type="file"
         accept="image/*"
         capture="environment"
+        className="hidden"
+        onChange={e => handlePhotoChange(e, "after")}
+        disabled={isUploading}
+      />
+      <input
+        ref={afterUploadRef}
+        type="file"
+        accept="image/*"
         className="hidden"
         onChange={e => handlePhotoChange(e, "after")}
         disabled={isUploading}
@@ -301,10 +381,20 @@ export default function FieldJobView({
           type="button"
           onClick={handleTagLocation}
           disabled={isClocking || gps.acquiring}
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-3 text-sm font-semibold text-charcoal hover:bg-gray-100 disabled:opacity-60"
+          className={`w-full flex items-center justify-center gap-2 rounded-xl border py-3 text-sm font-semibold transition-colors disabled:opacity-60 ${
+            isLocationTagged
+              ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+              : "border-gray-200 bg-gray-50 text-charcoal hover:bg-gray-100"
+          }`}
         >
-          {gps.acquiring ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
-          {gps.acquiring ? "Getting GPS..." : "Tag Site Location"}
+          {gps.acquiring ? (
+            <Loader2 size={16} className="animate-spin" />
+          ) : isLocationTagged ? (
+            <CheckCircle2 size={16} />
+          ) : (
+            <MapPin size={16} />
+          )}
+          {gps.acquiring ? "Getting GPS..." : isLocationTagged ? "Site Location Tagged" : "Tag Site Location"}
         </button>
       </div>
 
@@ -325,10 +415,10 @@ export default function FieldJobView({
             )}
 
             {localBefore < BEFORE_REQUIRED && (
-              <div>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => openCameraInput(beforeRef.current)}
+                  onClick={() => openPhotoInput(beforeCameraRef.current)}
                   disabled={isUploading}
                   className={`w-full flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-amber-300 bg-amber-50 hover:bg-amber-100 active:bg-amber-200"}`}
                 >
@@ -338,7 +428,22 @@ export default function FieldJobView({
                     <Camera size={22} className="text-amber-600" />
                   )}
                   <span className="font-semibold text-amber-700">
-                    {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : `Take Before Photos (${localBefore}/${BEFORE_REQUIRED})`}
+                    {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : "Take Photo"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPhotoInput(beforeUploadRef.current)}
+                  disabled={isUploading}
+                  className={`w-full flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-gray-300 bg-gray-50 hover:bg-gray-100 active:bg-gray-200"}`}
+                >
+                  {isUploading ? (
+                    <Loader2 size={20} className="text-gray-400 animate-spin" />
+                  ) : (
+                    <Upload size={21} className="text-charcoal" />
+                  )}
+                  <span className="font-semibold text-charcoal">
+                    Upload Photo
                   </span>
                 </button>
               </div>
@@ -347,12 +452,23 @@ export default function FieldJobView({
             {canStart && (
               <button
                 type="button"
-                onClick={() => openCameraInput(beforeRef.current)}
+                onClick={() => openPhotoInput(beforeCameraRef.current)}
                 disabled={isUploading}
                 className="flex w-full items-center justify-center gap-2 text-sm text-green-600 font-medium hover:underline disabled:opacity-60"
               >
                 <Camera size={14} />
                 Add more before photos
+              </button>
+            )}
+            {canStart && (
+              <button
+                type="button"
+                onClick={() => openPhotoInput(beforeUploadRef.current)}
+                disabled={isUploading}
+                className="flex w-full items-center justify-center gap-2 text-sm text-charcoal font-medium hover:underline disabled:opacity-60"
+              >
+                <Upload size={14} />
+                Upload before photo
               </button>
             )}
           </div>
@@ -405,10 +521,10 @@ export default function FieldJobView({
             )}
 
             {localAfter < AFTER_REQUIRED && (
-              <div>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => openCameraInput(afterRef.current)}
+                  onClick={() => openPhotoInput(afterCameraRef.current)}
                   disabled={isUploading}
                   className={`w-full flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-blue-300 bg-blue-50 hover:bg-blue-100 active:bg-blue-200"}`}
                 >
@@ -418,7 +534,22 @@ export default function FieldJobView({
                     <Camera size={22} className="text-blue-600" />
                   )}
                   <span className="font-semibold text-blue-700">
-                    {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : `Take After Photos (${localAfter}/${AFTER_REQUIRED})`}
+                    {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : "Take Photo"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openPhotoInput(afterUploadRef.current)}
+                  disabled={isUploading}
+                  className={`w-full flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-gray-300 bg-gray-50 hover:bg-gray-100 active:bg-gray-200"}`}
+                >
+                  {isUploading ? (
+                    <Loader2 size={20} className="text-gray-400 animate-spin" />
+                  ) : (
+                    <Upload size={21} className="text-charcoal" />
+                  )}
+                  <span className="font-semibold text-charcoal">
+                    Upload Photo
                   </span>
                 </button>
               </div>
@@ -427,12 +558,23 @@ export default function FieldJobView({
             {canClockOut && (
               <button
                 type="button"
-                onClick={() => openCameraInput(afterRef.current)}
+                onClick={() => openPhotoInput(afterCameraRef.current)}
                 disabled={isUploading}
                 className="flex w-full items-center justify-center gap-2 text-sm text-green-600 font-medium hover:underline disabled:opacity-60"
               >
                 <Camera size={14} />
                 Add more after photos
+              </button>
+            )}
+            {canClockOut && (
+              <button
+                type="button"
+                onClick={() => openPhotoInput(afterUploadRef.current)}
+                disabled={isUploading}
+                className="flex w-full items-center justify-center gap-2 text-sm text-charcoal font-medium hover:underline disabled:opacity-60"
+              >
+                <Upload size={14} />
+                Upload after photo
               </button>
             )}
           </div>

@@ -12,6 +12,49 @@ type GpsPayload = {
   captured_at_device: string;
 };
 
+const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+const ALLOWED_PHOTO_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+function inferPhotoMimeType(file: File) {
+  const type = file.type?.toLowerCase();
+  if (type && ALLOWED_PHOTO_MIME_TYPES.has(type)) return type;
+
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  const mimeByExt: Record<string, string> = {
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    webp: "image/webp",
+    heic: "image/heic",
+    heif: "image/heif",
+  };
+
+  return ext ? mimeByExt[ext] ?? "" : "";
+}
+
+function photoExtension(mimeType: string, fileName: string) {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  if (ext && ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(ext)) {
+    return ext === "jpeg" ? "jpg" : ext;
+  }
+
+  const extByMime: Record<string, string> = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/heic": "heic",
+    "image/heif": "heif",
+  };
+
+  return extByMime[mimeType] ?? "jpg";
+}
+
 function getAdminClient() {
   return createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -207,15 +250,24 @@ export async function uploadJobPhoto(formData: FormData, jobId: string, type: "b
 
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { error: "No file provided" };
+  if (file.size > MAX_PHOTO_BYTES) {
+    return { error: "Photo is too large. Please retake it or choose a smaller image." };
+  }
+
+  const mimeType = inferPhotoMimeType(file);
+  if (!mimeType || !ALLOWED_PHOTO_MIME_TYPES.has(mimeType)) {
+    return { error: "Unsupported photo type. Please upload a JPG, PNG, WebP, HEIC, or HEIF image." };
+  }
+
   const gps = parseGps(formData);
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const ext = photoExtension(mimeType, file.name);
   const storagePath = `${jobId}/${type}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
   const admin = getAdminClient();
   const { error: uploadError } = await admin.storage
     .from("job-photos")
-    .upload(storagePath, file, { contentType: file.type, upsert: false });
+    .upload(storagePath, file, { contentType: mimeType, upsert: false });
 
   if (uploadError) return { error: `Upload failed: ${uploadError.message}` };
 
