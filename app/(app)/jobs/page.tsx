@@ -3,6 +3,7 @@ import Link from "next/link";
 import { formatDate } from "@/lib/utils/format";
 import StatusBadge, { jobStatusBadge } from "@/components/ui/StatusBadge";
 import { Plus, Briefcase } from "lucide-react";
+import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 
 export const metadata = { title: "Jobs" };
 
@@ -34,6 +35,7 @@ export default async function JobsPage({
 
   return (
     <div className="space-y-6">
+      <JobsLiveRefresh />
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-charcoal">Jobs</h1>
         <Link href="/jobs/new" className="flex items-center gap-2 bg-redline text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-redline-dark transition-colors">

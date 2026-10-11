@@ -5,7 +5,7 @@ import { formatDate, formatDateTime } from "@/lib/utils/format";
 import StatusBadge, { jobStatusBadge } from "@/components/ui/StatusBadge";
 import {
   ChevronRight, Edit, Clock, User, MapPin, Wrench,
-  Calendar, AlertTriangle, ClipboardList
+  Calendar, AlertTriangle, ClipboardList, Camera, ImageOff
 } from "lucide-react";
 import JobStatusUpdater from "./JobStatusUpdater";
 
@@ -35,6 +35,14 @@ const JOB_STATUS_TRANSITIONS: Record<string, string[]> = {
   archived: [],
 };
 
+type JobPhotoRow = {
+  id: string;
+  url: string;
+  photo_type: "before" | "after";
+  created_at: string;
+  profiles: { first_name: string; last_name: string } | null;
+};
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
@@ -59,7 +67,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   if (!job) notFound();
 
-  const [{ data: assignments }, { data: timeEntries }] = await Promise.all([
+  const [{ data: assignments }, { data: timeEntries }, { data: photos }] = await Promise.all([
     supabase
       .from("job_assignments")
       .select("id, role, profiles!employee_id(first_name, last_name)")
@@ -69,6 +77,11 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
       .select("id, clock_in, clock_out, break_minutes, notes, profiles!employee_id(first_name, last_name)")
       .eq("job_id", id)
       .order("clock_in", { ascending: false }),
+    supabase
+      .from("job_photos")
+      .select("id, url, photo_type, created_at, profiles!employee_id(first_name, last_name)")
+      .eq("job_id", id)
+      .order("created_at", { ascending: true }),
   ]);
 
   const customer = job.customers as unknown as { id: string; first_name: string; last_name: string; business_name: string | null; account_type: string } | null;
@@ -77,6 +90,9 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   const badge = jobStatusBadge(job.status);
   const nextStatuses = JOB_STATUS_TRANSITIONS[job.status] ?? [];
+  const jobPhotos = (photos ?? []) as unknown as JobPhotoRow[];
+  const beforePhotos = jobPhotos.filter((photo) => photo.photo_type === "before");
+  const afterPhotos = jobPhotos.filter((photo) => photo.photo_type === "after");
 
   function calcHours(clockIn: string, clockOut: string | null, breakMins: number): string {
     if (!clockOut) return "In progress";
@@ -231,6 +247,12 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
             </div>
           )}
 
+          {/* Photo Evidence */}
+          <div className="grid gap-6 md:grid-cols-2">
+            <JobPhotoSection title="Before Photos" photos={beforePhotos} />
+            <JobPhotoSection title="After Photos" photos={afterPhotos} />
+          </div>
+
           {/* Time Entries */}
           <div className="bg-white rounded-xl border border-gray-200">
             <div className="px-5 py-4 border-b border-gray-100">
@@ -324,6 +346,56 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function JobPhotoSection({ title, photos }: { title: string; photos: JobPhotoRow[] }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-semibold text-charcoal flex items-center gap-2">
+          <Camera size={16} className="text-muted" />
+          {title}
+        </h2>
+        <span className="text-sm text-muted">{photos.length} photo{photos.length !== 1 ? "s" : ""}</span>
+      </div>
+
+      {photos.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 rounded-xl bg-gray-50 py-8 text-sm text-muted">
+          <ImageOff size={18} className="text-gray-300" />
+          No photos uploaded
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {photos.map((photo) => {
+            const worker = photo.profiles
+              ? `${photo.profiles.first_name} ${photo.profiles.last_name}`
+              : "Unknown";
+            return (
+              <a
+                key={photo.id}
+                href={photo.url}
+                target="_blank"
+                rel="noreferrer"
+                className="group block overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                title={`${worker} - ${formatDateTime(photo.created_at)}`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photo.url}
+                  alt={`${title} evidence`}
+                  className="aspect-square w-full object-cover transition-opacity group-hover:opacity-90"
+                />
+                <div className="px-2 py-1.5">
+                  <p className="truncate text-[11px] font-medium text-charcoal">{worker}</p>
+                  <p className="truncate text-[10px] text-muted">{formatDateTime(photo.created_at)}</p>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

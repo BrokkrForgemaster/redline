@@ -115,6 +115,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
   });
 }
 
+function photoFingerprint(file: File) {
+  return [file.name, file.size, file.lastModified].join(":");
+}
+
 async function preparePhotoForUpload(file: File) {
   if (!file.type.startsWith("image/")) return file;
 
@@ -277,8 +281,16 @@ export default function FieldJobView({
 
     startUploadTransition(async () => {
       let saved = 0;
+      const selected = new Set<string>();
       try {
         for (const file of files) {
+          const fingerprint = photoFingerprint(file);
+          if (selected.has(fingerprint)) {
+            toast.error("Skipped a duplicate photo from this selection.");
+            continue;
+          }
+          selected.add(fingerprint);
+
           const uploadFile = await preparePhotoForUpload(file);
           if (uploadFile.size > MAX_UPLOAD_BYTES) {
             toast.error("Photo is too large to upload. Retake it at a lower resolution or choose a smaller image.");
@@ -330,6 +342,7 @@ export default function FieldJobView({
         ref={beforeUploadRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={e => handlePhotoChange(e, "before")}
         disabled={isUploading}
@@ -347,6 +360,7 @@ export default function FieldJobView({
         ref={afterUploadRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={e => handlePhotoChange(e, "after")}
         disabled={isUploading}

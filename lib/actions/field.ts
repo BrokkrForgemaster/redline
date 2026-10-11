@@ -186,12 +186,19 @@ export async function clockIn(jobId: string, gps?: GpsPayload | null) {
 
   if (error) return { error: "Failed to clock in. Please try again." };
 
-  // Advance job status if it hasn't started yet
-  await sb
+  const admin = getAdminClient();
+
+  // Advance job status if it hasn't started yet. Use service role so assigned
+  // subcontractors are not blocked by admin-only job update policies.
+  const { error: jobUpdateError } = await admin
     .from("jobs")
     .update({ status: "in_progress" })
     .eq("id", jobId)
     .in("status", ["scheduled", "en_route", "arrived", "approved", "ready_to_schedule"]);
+
+  if (jobUpdateError) {
+    console.error("Failed to mark legacy job in progress", jobUpdateError);
+  }
 
   await insertLocationTag(supabase, jobId, user.id, "start", gps ?? null);
   await notifyPrivilegedUsersOfLegacyJobEvent("start", jobId, user.id).catch((error) => {
@@ -200,6 +207,9 @@ export async function clockIn(jobId: string, gps?: GpsPayload | null) {
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/dashboard");
   return { entryId: (data as { id: string }).id };
 }
 
@@ -220,6 +230,16 @@ export async function clockOut(entryId: string, jobId: string, gps?: GpsPayload 
 
   if (error || !updatedEntry) return { error: "Failed to clock out. Please try again." };
 
+  const { error: jobUpdateError } = await admin
+    .from("jobs")
+    .update({ status: "completed" })
+    .eq("id", jobId)
+    .in("status", ["in_progress", "paused", "arrived", "en_route", "scheduled"]);
+
+  if (jobUpdateError) {
+    console.error("Failed to mark legacy job completed", jobUpdateError);
+  }
+
   await insertLocationTag(supabase, jobId, user.id, "finish", gps ?? null);
   await notifyPrivilegedUsersOfLegacyJobEvent("finish", jobId, user.id).catch((error) => {
     console.error("Failed to notify privileged users of job finish", error);
@@ -227,6 +247,9 @@ export async function clockOut(entryId: string, jobId: string, gps?: GpsPayload 
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath("/jobs");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 

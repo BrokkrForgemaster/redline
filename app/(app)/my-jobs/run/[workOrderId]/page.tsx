@@ -87,6 +87,10 @@ function withTimeout<T>(promise: Promise<T>, message: string) {
   });
 }
 
+function photoFingerprint(file: File) {
+  return [file.name, file.size, file.lastModified].join(":");
+}
+
 function loadImageFromFile(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file);
@@ -450,8 +454,16 @@ export default function ServiceRunPage() {
       }, PHOTO_UPLOAD_TIMEOUT_MS + 5_000);
       let saved = 0;
       let queued = 0;
+      const selected = new Set<string>();
 
       for (const file of files) {
+        const fingerprint = photoFingerprint(file);
+        if (selected.has(fingerprint)) {
+          toast.error("Skipped a duplicate photo from this selection.");
+          continue;
+        }
+        selected.add(fingerprint);
+
         const uploadFile = await preparePhotoForUpload(file);
         if (uploadFile.size > MAX_UPLOAD_BYTES) {
           toast.error("Photo is too large to upload. Retake it at a lower resolution or choose a smaller image.");
@@ -1087,6 +1099,7 @@ function PhotoSection({
           ref={uploadInputRef}
           type="file"
           accept="image/*"
+          multiple
           className="hidden"
           onChange={onChange}
           disabled={disabled}

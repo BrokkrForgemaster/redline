@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { canViewOperationsDashboard, getEffectiveRole } from "@/lib/auth/privileged-users";
 import DashboardLiveRefresh from "@/components/app/DashboardLiveRefresh";
+import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 import {
   Bell,
   Briefcase,
@@ -179,6 +180,7 @@ function OperationsDashboard({ data, role }: { data: Awaited<ReturnType<typeof l
   return (
     <div className="-m-4 md:-m-6 lg:-m-8 bg-charcoal min-h-full p-4 md:p-6 lg:p-8">
       <DashboardLiveRefresh />
+      <JobsLiveRefresh />
       <div className="mx-auto max-w-7xl space-y-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
@@ -228,6 +230,7 @@ function SubcontractorDashboard({ jobs }: { jobs: JobRow[] }) {
 
   return (
     <div className="-m-4 md:-m-6 lg:-m-8 bg-charcoal min-h-full p-4 md:p-6 lg:p-8">
+      <JobsLiveRefresh />
       <div className="mx-auto max-w-5xl space-y-5">
         <div>
           <h1 className="text-2xl font-bold text-white">Subcontractor Dashboard</h1>
