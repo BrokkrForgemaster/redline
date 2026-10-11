@@ -1,6 +1,8 @@
 import Link from "next/link";
 import Image from "next/image";
 
+const COPYRIGHT_YEAR = 2026;
+
 export default function Footer() {
   return (
     <footer className="bg-charcoal text-white">
@@ -91,6 +93,14 @@ export default function Footer() {
                   Request a Quote
                 </Link>
               </li>
+              <li>
+                <Link
+                  href="/subcontractor"
+                  className="inline-flex items-center justify-center rounded-md border border-redline bg-redline px-4 py-2 text-xs font-bold uppercase tracking-wide text-white shadow-sm transition-colors hover:bg-redline-dark hover:text-white"
+                >
+                  Subcontractor Login
+                </Link>
+              </li>
             </ul>
             <div className="mt-6">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-300">
@@ -108,7 +118,7 @@ export default function Footer() {
       <div className="border-t border-gray-800">
         <div className="max-w-7xl mx-auto px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-500">
           <p>
-            &copy; {new Date().getFullYear()} Redline Landscaping &amp; Snow
+            &copy; {COPYRIGHT_YEAR} Redline Landscaping &amp; Snow
             Removal. All rights reserved.
           </p>
           <p>Firefighter Owned &amp; Operated</p>

@@ -9,10 +9,10 @@ import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
-export default function LoginForm() {
+export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = searchParams.get("next") ?? defaultNext;
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 

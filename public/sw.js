@@ -1,13 +1,13 @@
-// Redline Landscaping & Snow Removal — Service Worker v2
+// Redline Landscaping & Snow Removal — Service Worker v3
 // Strategies:
 //   Public site pages  → stale-while-revalidate (serve cached instantly, update in background)
 //   Admin app pages    → network-first with cache fallback (fresh data when online, stale when offline)
 //   Static assets      → cache-first (immutable _next/static chunks, images)
 //   Supabase/API calls → network-only (always skip — auth & live data)
 
-const STATIC_CACHE = "redline-static-v2";
-const PAGES_CACHE = "redline-pages-v2";
-const IMAGES_CACHE = "redline-images-v2";
+const STATIC_CACHE = "redline-static-v3";
+const PAGES_CACHE = "redline-pages-v3";
+const IMAGES_CACHE = "redline-images-v3";
 const KNOWN_CACHES = [STATIC_CACHE, PAGES_CACHE, IMAGES_CACHE];
 const OFFLINE_URL = "/offline";
 

@@ -753,6 +753,7 @@ export type Database = {
 
 export type AppRole =
   | "owner"
+  | "developer"
   | "administrator"
   | "operations_manager"
   | "office_manager"

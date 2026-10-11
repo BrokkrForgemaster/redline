@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Profile } from "@/types/database";
 import { Menu, Bell, Search, LogOut, User, Settings, ChevronDown, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
+import { getProfileDisplayName, getProfileInitials } from "@/lib/auth/profile-display";
 
 interface Props {
   profile: Profile;
@@ -19,6 +20,8 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const menuRef = useRef<HTMLDivElement>(null);
+  const displayName = getProfileDisplayName(profile);
+  const initials = getProfileInitials(profile);
 
   useEffect(() => {
     function handleOnline() { setIsOnline(true); }
@@ -105,21 +108,21 @@ export default function TopBar({ profile, onMenuClick }: Props) {
               {profile.avatar_url ? (
                 <Image
                   src={profile.avatar_url}
-                  alt={`${profile.first_name} ${profile.last_name}`}
+                  alt={displayName}
                   fill
                   className="object-cover"
                 />
               ) : (
                 <div className="w-full h-full bg-redline flex items-center justify-center">
                   <span className="text-white text-xs font-bold">
-                    {profile.first_name[0]}{profile.last_name[0]}
+                    {initials}
                   </span>
                 </div>
               )}
             </div>
             <div className="hidden sm:block text-left">
               <p className="text-sm font-medium text-charcoal leading-none">
-                {profile.first_name} {profile.last_name}
+                {displayName}
               </p>
             </div>
             <ChevronDown size={14} className="text-gray-400 hidden sm:block" />
@@ -128,7 +131,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
           {userMenuOpen && (
             <div className="absolute right-0 top-full mt-1 w-52 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
               <div className="px-4 py-2 border-b border-gray-100 mb-1">
-                <p className="text-sm font-medium text-charcoal">{profile.first_name} {profile.last_name}</p>
+                <p className="text-sm font-medium text-charcoal">{displayName}</p>
                 <p className="text-xs text-muted">{profile.email}</p>
               </div>
               <Link

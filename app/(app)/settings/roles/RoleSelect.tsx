@@ -6,6 +6,7 @@ import { updateProfileRole } from "@/lib/actions/settings";
 import { Loader2 } from "lucide-react";
 
 const ROLES = [
+  "developer",
   "administrator",
   "operations_manager",
   "office_manager",

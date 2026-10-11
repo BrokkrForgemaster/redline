@@ -1,0 +1,248 @@
+openapi: 3.1.0
+info:
+  title: RedLine Field Service API
+  version: 1.0.0
+  description: Server-authoritative API contracts for field service, tracking, offline replay, media, and admin review.
+servers:
+  - url: /api/v1
+security:
+  - cookieSession: []
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: sb-access-token
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          enum:
+            - AUTH_REQUIRED
+            - FORBIDDEN
+            - ASSIGNMENT_REQUIRED
+            - INVALID_STATE_TRANSITION
+            - LOCATION_REQUIRED
+            - LOCATION_ACCURACY_TOO_LOW
+            - OUTSIDE_GEOFENCE
+            - OVERRIDE_REQUIRED
+            - TEMPLATE_INCOMPLETE
+            - REQUIRED_PHOTOS_MISSING
+            - OFFLINE_AUTHORIZATION_EXPIRED
+            - CONFLICT_FINALIZED_RECORD
+            - IDEMPOTENCY_KEY_REQUIRED
+        message:
+          type: string
+    LocationFix:
+      type: object
+      required: [latitude, longitude, accuracy_meters, captured_at_device]
+      properties:
+        latitude:
+          type: number
+        longitude:
+          type: number
+        accuracy_meters:
+          type: number
+        captured_at_device:
+          type: string
+          format: date-time
+    ServiceState:
+      type: string
+      enum: [draft, scheduled, assigned, ready, in_progress, paused, submitted, needs_review, completed, rejected, cancelled]
+paths:
+  /me:
+    get:
+      summary: Current authenticated user and effective roles.
+      responses:
+        "200":
+          description: Current user.
+        "401":
+          description: Auth required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /me/assignments:
+    get:
+      summary: Assigned work, related properties, and template references for the field cache.
+      responses:
+        "200":
+          description: Assignment list.
+  /tracking/work-sessions/start:
+    post:
+      summary: Start an authorized employee work session and tracking lifecycle.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Work session started.
+  /tracking/work-sessions/stop:
+    post:
+      summary: Stop an authorized employee work session and tracking lifecycle.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Work session stopped.
+  /tracking/points/batch:
+    post:
+      summary: Upload ordered continuous tracking breadcrumb points.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "202":
+          description: Batch accepted and deduplicated.
+  /tracking/health-events:
+    post:
+      summary: Record tracking lifecycle, permission, OS restriction, gap, and backlog events.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: Health event recorded.
+  /work-orders/{id}:
+    get:
+      summary: Get an assigned work order.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Work order detail.
+  /work-orders/{id}/start:
+    post:
+      summary: Start service with authoritative assignment, state, and geofence validation.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [location]
+              properties:
+                location:
+                  $ref: "#/components/schemas/LocationFix"
+                override_reason:
+                  type: string
+      responses:
+        "201":
+          description: Service run started.
+  /service-runs/{id}/pause:
+    post:
+      summary: Pause an in-progress service run.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Paused.
+  /service-runs/{id}/resume:
+    post:
+      summary: Resume a paused service run.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Resumed.
+  /service-runs/{id}/submit:
+    post:
+      summary: Submit service evidence for admin review.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Submitted.
+  /service-runs/{id}/finish:
+    post:
+      summary: Finish a service run with authoritative geofence validation.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [location]
+              properties:
+                location:
+                  $ref: "#/components/schemas/LocationFix"
+                override_reason:
+                  type: string
+      responses:
+        "200":
+          description: Finished.
+  /admin/service-runs/{id}/approve:
+    post:
+      summary: Approve a submitted service run and create an immutable report version.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Approved.
+  /admin/service-runs/{id}/reject:
+    post:
+      summary: Reject or return a submitted service run.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Rejected.

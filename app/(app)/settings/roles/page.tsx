@@ -6,6 +6,8 @@ import type { Profile } from "@/types/database";
 export const metadata = { title: "Roles & Permissions" };
 
 const ROLE_LABELS: Record<string, string> = {
+  owner: "Owner",
+  developer: "Developer",
   administrator: "Administrator",
   operations_manager: "Operations Manager",
   office_manager: "Office Manager",

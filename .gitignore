@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+.claude/settings.local.json
+supabase/.temp/
 
 # debug
 npm-debug.log*

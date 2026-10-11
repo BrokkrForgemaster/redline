@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import AppShell from "@/components/app/AppShell";
+import { getEffectiveRole } from "@/lib/auth/privileged-users";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -23,5 +24,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect(`/login?error=${error}`);
   }
 
-  return <AppShell profile={profile}>{children}</AppShell>;
+  const effectiveProfile = {
+    ...profile,
+    role: getEffectiveRole(user.email, profile.role, profile.email) as typeof profile.role,
+  };
+
+  return <AppShell profile={effectiveProfile}>{children}</AppShell>;
 }

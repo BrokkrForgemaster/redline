@@ -8,7 +8,11 @@ import {
   ArrowLeft, MapPin, Clock, Camera, CheckCircle2,
   Loader2, PlayCircle, StopCircle, AlertTriangle,
 } from "lucide-react";
-import { clockIn, clockOut, uploadJobPhoto } from "@/lib/actions/field";
+import { clockIn, clockOut, tagJobLocation, uploadJobPhoto } from "@/lib/actions/field";
+import { type GpsLocation, useGps } from "@/lib/field/useGps";
+
+const BEFORE_REQUIRED = 3;
+const AFTER_REQUIRED = 3;
 
 interface Job {
   id: string;
@@ -66,6 +70,26 @@ function formatMinutes(mins: number | null | undefined) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function PhotoCounter({ count, required }: { count: number; required: number }) {
+  const met = count >= required;
+  return (
+    <div className={`flex items-center gap-3 rounded-xl px-4 py-2.5 ${met ? "bg-green-50" : "bg-amber-50"}`}>
+      <div className="flex gap-1">
+        {Array.from({ length: required }).map((_, i) => (
+          <span
+            key={i}
+            className={`w-2.5 h-2.5 rounded-full ${i < count ? (met ? "bg-green-500" : "bg-amber-500") : "bg-gray-200"}`}
+          />
+        ))}
+      </div>
+      <span className={`text-sm font-medium ${met ? "text-green-700" : "text-amber-700"}`}>
+        {count} of {required} photos{count > required ? ` (${count} total)` : ""}
+      </span>
+      {met && <CheckCircle2 size={15} className="text-green-600 ml-auto" />}
+    </div>
+  );
+}
+
 export default function FieldJobView({
   job, activeEntry, completedEntry, beforeCount, afterCount,
 }: Props) {
@@ -77,8 +101,8 @@ export default function FieldJobView({
   const [localAfter, setLocalAfter] = useState(afterCount);
   const beforeRef = useRef<HTMLInputElement>(null);
   const afterRef = useRef<HTMLInputElement>(null);
+  const gps = useGps();
 
-  // Live timer while clocked in
   useEffect(() => {
     if (!activeEntry) return;
     const start = new Date(activeEntry.clock_in).getTime();
@@ -99,18 +123,46 @@ export default function FieldJobView({
     : null;
   const jobLabel = job.title || SERVICE_LABELS[job.service_type] || "Job";
 
-  // Determine state
+  const canStart = localBefore >= BEFORE_REQUIRED;
+  const canClockOut = localAfter >= AFTER_REQUIRED;
   const isDone = !!completedEntry;
   const isActive = !isDone && !!activeEntry;
   const isReady = !isDone && !isActive;
 
+  function appendGps(fd: FormData, loc: GpsLocation | null) {
+    if (!loc) return;
+    fd.append("latitude", String(loc.latitude));
+    fd.append("longitude", String(loc.longitude));
+    fd.append("accuracy_meters", String(loc.accuracy_meters));
+    fd.append("captured_at_device", loc.captured_at_device);
+  }
+
+  async function captureLocation() {
+    const loc = await gps.acquire();
+    if (!loc) toast.error(gps.error ?? "Could not get GPS location.");
+    return loc;
+  }
+
+  function handleTagLocation() {
+    startClockTransition(async () => {
+      const loc = await captureLocation();
+      if (!loc) return;
+      const fd = new FormData();
+      appendGps(fd, loc);
+      const result = await tagJobLocation(fd, job.id);
+      if (result.error) toast.error(result.error);
+      else toast.success("Location tagged to this job.");
+    });
+  }
+
   function handleClockIn() {
     startClockTransition(async () => {
-      const result = await clockIn(job.id);
+      const loc = await captureLocation();
+      const result = await clockIn(job.id, loc);
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Clocked in — time is running!");
+        toast.success(loc ? "Clocked in and location tagged." : "Clocked in.");
         router.refresh();
       }
     });
@@ -119,11 +171,12 @@ export default function FieldJobView({
   function handleClockOut() {
     if (!activeEntry) return;
     startClockTransition(async () => {
-      const result = await clockOut(activeEntry.id, job.id);
+      const loc = await captureLocation();
+      const result = await clockOut(activeEntry.id, job.id, loc);
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success("Clocked out. Nice work!");
+        toast.success(loc ? "Clocked out and location tagged." : "Clocked out.");
         router.refresh();
       }
     });
@@ -139,28 +192,27 @@ export default function FieldJobView({
     startUploadTransition(async () => {
       let saved = 0;
       for (const file of files) {
+        const loc = await gps.acquire();
         const fd = new FormData();
         fd.append("file", file);
+        appendGps(fd, loc);
         const result = await uploadJobPhoto(fd, job.id, type);
-        if (result.error) {
-          toast.error(result.error);
-        } else {
-          saved++;
-        }
+        if (result.url) saved++;
+        else toast.error(result.error ?? "Upload failed.");
       }
       if (saved > 0) {
         if (type === "before") setLocalBefore(n => n + saved);
         else setLocalAfter(n => n + saved);
-        toast.success(saved === 1 ? "Photo saved" : `${saved} photos saved`);
+        toast.success(`${saved} photo${saved !== 1 ? "s" : ""} saved.`);
       }
     });
 
-    // Clear so the same file can be re-selected if needed
     e.target.value = "";
   }
 
   return (
-    <div className="max-w-lg mx-auto space-y-4 px-1 pb-8">
+    <div className="max-w-lg mx-auto space-y-4 pb-28">
+
       {/* Back */}
       <Link
         href="/my-jobs"
@@ -214,27 +266,100 @@ export default function FieldJobView({
             </div>
           </div>
         )}
+
+        {gps.error && (
+          <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5 text-red-500" />
+            <span>{gps.error}</span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleTagLocation}
+          disabled={isClocking || gps.acquiring}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-gray-50 py-3 text-sm font-semibold text-charcoal hover:bg-gray-100 disabled:opacity-60"
+        >
+          {gps.acquiring ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} />}
+          {gps.acquiring ? "Getting GPS..." : "Tag Site Location"}
+        </button>
       </div>
 
       {/* ── STATE: NOT STARTED ── */}
       {isReady && (
         <div className="space-y-3">
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 text-center text-sm text-muted">
-            Tap <strong className="text-charcoal">Start Job</strong> when you arrive on site.
-            This clocks you in and starts time tracking automatically.
+          {/* Before photos — required before starting */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+            <div>
+              <p className="font-semibold text-charcoal">Before Photos</p>
+              <p className="text-sm text-muted mt-0.5">
+                Take {BEFORE_REQUIRED} photos of the property before starting work.
+              </p>
+            </div>
+
+            {localBefore > 0 && (
+              <PhotoCounter count={localBefore} required={BEFORE_REQUIRED} />
+            )}
+
+            {localBefore < BEFORE_REQUIRED && (
+              <label className="block cursor-pointer">
+                <div className={`flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-amber-300 bg-amber-50 hover:bg-amber-100 active:bg-amber-200"}`}>
+                  {isUploading ? (
+                    <Loader2 size={20} className="text-gray-400 animate-spin" />
+                  ) : (
+                    <Camera size={22} className="text-amber-600" />
+                  )}
+                  <span className="font-semibold text-amber-700">
+                    {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : `Take Before Photos (${localBefore}/${BEFORE_REQUIRED})`}
+                  </span>
+                </div>
+                <input
+                  ref={beforeRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={e => handlePhotoChange(e, "before")}
+                  disabled={isUploading}
+                />
+              </label>
+            )}
+
+            {canStart && (
+              <label className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium cursor-pointer hover:underline">
+                <Camera size={14} />
+                Add more before photos
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={e => handlePhotoChange(e, "before")}
+                  disabled={isUploading}
+                />
+              </label>
+            )}
           </div>
+
           <button
             onClick={handleClockIn}
-            disabled={isClocking}
-            className="w-full flex items-center justify-center gap-3 bg-lawn hover:bg-lawn/90 active:bg-lawn/80 text-white font-bold text-lg rounded-2xl py-6 transition-colors disabled:opacity-60 shadow-sm shadow-lawn/30"
+            disabled={isClocking || gps.acquiring || !canStart}
+            className="w-full flex items-center justify-center gap-3 bg-lawn hover:bg-lawn/90 active:bg-lawn/80 text-white font-bold text-lg rounded-2xl py-6 transition-colors disabled:opacity-40 shadow-sm shadow-lawn/30"
           >
             {isClocking ? (
               <Loader2 size={24} className="animate-spin" />
             ) : (
               <PlayCircle size={28} />
             )}
-            {isClocking ? "Starting…" : "Start Job"}
+            {gps.acquiring ? "Getting GPS..." : isClocking ? "Starting..." : "Start Job"}
           </button>
+          {!canStart && (
+            <p className="text-center text-sm text-muted">
+              {BEFORE_REQUIRED} before photos required to start.
+            </p>
+          )}
         </div>
       )}
 
@@ -252,56 +377,55 @@ export default function FieldJobView({
             </span>
           </div>
 
-          {/* Before photos */}
+          {/* After photos — required before clocking out */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
             <div>
-              <p className="font-semibold text-charcoal">Before Photos</p>
+              <p className="font-semibold text-charcoal">After Photos</p>
               <p className="text-sm text-muted mt-0.5">
-                Take photos of the property before you start work.
+                Take {AFTER_REQUIRED} photos of the finished work before clocking out.
               </p>
             </div>
 
-            {localBefore > 0 && (
-              <div className="flex items-center justify-between bg-green-50 rounded-xl px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-green-600" />
-                  <span className="text-sm font-medium text-green-700">
-                    {localBefore} photo{localBefore !== 1 ? "s" : ""} saved
-                  </span>
-                </div>
-                <label className="text-sm text-green-600 font-medium cursor-pointer hover:underline">
-                  Add more
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={e => handlePhotoChange(e, "before")}
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
+            {localAfter > 0 && (
+              <PhotoCounter count={localAfter} required={AFTER_REQUIRED} />
             )}
 
-            {localBefore === 0 && (
+            {localAfter < AFTER_REQUIRED && (
               <label className="block cursor-pointer">
-                <div className={`flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-amber-300 bg-amber-50 hover:bg-amber-100 active:bg-amber-200"}`}>
+                <div className={`flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-blue-300 bg-blue-50 hover:bg-blue-100 active:bg-blue-200"}`}>
                   {isUploading ? (
                     <Loader2 size={20} className="text-gray-400 animate-spin" />
                   ) : (
-                    <Camera size={22} className="text-amber-600" />
+                    <Camera size={22} className="text-blue-600" />
                   )}
-                  <span className="font-semibold text-amber-700">
-                    {isUploading ? "Uploading…" : "Take Before Photos"}
+                  <span className="font-semibold text-blue-700">
+                    {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : `Take After Photos (${localAfter}/${AFTER_REQUIRED})`}
                   </span>
                 </div>
                 <input
-                  ref={beforeRef}
+                  ref={afterRef}
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   multiple
                   className="hidden"
-                  onChange={e => handlePhotoChange(e, "before")}
+                  onChange={e => handlePhotoChange(e, "after")}
+                  disabled={isUploading}
+                />
+              </label>
+            )}
+
+            {canClockOut && (
+              <label className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium cursor-pointer hover:underline">
+                <Camera size={14} />
+                Add more after photos
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  multiple
+                  className="hidden"
+                  onChange={e => handlePhotoChange(e, "after")}
                   disabled={isUploading}
                 />
               </label>
@@ -318,23 +442,27 @@ export default function FieldJobView({
           {/* Clock out */}
           <button
             onClick={handleClockOut}
-            disabled={isClocking}
-            className="w-full flex items-center justify-center gap-3 bg-redline hover:bg-redline-dark active:bg-redline/80 text-white font-bold text-lg rounded-2xl py-6 transition-colors disabled:opacity-60 shadow-sm shadow-redline/30"
+            disabled={isClocking || gps.acquiring || !canClockOut}
+            className="w-full flex items-center justify-center gap-3 bg-redline hover:bg-redline-dark active:bg-redline/80 text-white font-bold text-lg rounded-2xl py-6 transition-colors disabled:opacity-40 shadow-sm shadow-redline/30"
           >
             {isClocking ? (
               <Loader2 size={24} className="animate-spin" />
             ) : (
               <StopCircle size={28} />
             )}
-            {isClocking ? "Clocking out…" : "Clock Out"}
+            {gps.acquiring ? "Getting GPS..." : isClocking ? "Clocking out..." : "Clock Out"}
           </button>
+          {!canClockOut && (
+            <p className="text-center text-sm text-muted">
+              {AFTER_REQUIRED} after photos required to clock out.
+            </p>
+          )}
         </div>
       )}
 
       {/* ── STATE: COMPLETED ── */}
       {isDone && (
         <div className="space-y-3">
-          {/* Summary */}
           <div className="bg-white rounded-2xl border border-gray-200 p-5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
@@ -351,60 +479,15 @@ export default function FieldJobView({
             </div>
           </div>
 
-          {/* After photos */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
-            <div>
-              <p className="font-semibold text-charcoal">After Photos</p>
-              <p className="text-sm text-muted mt-0.5">
-                Take photos of the finished work so the office can see the results.
-              </p>
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-2">
+            <div className="flex items-center gap-2 text-sm text-green-700">
+              <CheckCircle2 size={15} className="text-green-600" />
+              <span>{localBefore} before photo{localBefore !== 1 ? "s" : ""} on file</span>
             </div>
-
-            {localAfter > 0 && (
-              <div className="flex items-center justify-between bg-green-50 rounded-xl px-4 py-2.5">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={16} className="text-green-600" />
-                  <span className="text-sm font-medium text-green-700">
-                    {localAfter} photo{localAfter !== 1 ? "s" : ""} saved
-                  </span>
-                </div>
-                <label className="text-sm text-green-600 font-medium cursor-pointer hover:underline">
-                  Add more
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={e => handlePhotoChange(e, "after")}
-                    disabled={isUploading}
-                  />
-                </label>
-              </div>
-            )}
-
-            {localAfter === 0 && (
-              <label className="block cursor-pointer">
-                <div className={`flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-blue-300 bg-blue-50 hover:bg-blue-100 active:bg-blue-200"}`}>
-                  {isUploading ? (
-                    <Loader2 size={20} className="text-gray-400 animate-spin" />
-                  ) : (
-                    <Camera size={22} className="text-blue-600" />
-                  )}
-                  <span className="font-semibold text-blue-700">
-                    {isUploading ? "Uploading…" : "Take After Photos"}
-                  </span>
-                </div>
-                <input
-                  ref={afterRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  className="hidden"
-                  onChange={e => handlePhotoChange(e, "after")}
-                  disabled={isUploading}
-                />
-              </label>
-            )}
+            <div className="flex items-center gap-2 text-sm text-green-700">
+              <CheckCircle2 size={15} className="text-green-600" />
+              <span>{localAfter} after photo{localAfter !== 1 ? "s" : ""} on file</span>
+            </div>
           </div>
 
           <Link

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 
+const COPYRIGHT_YEAR = 2026;
+
 export const metadata: Metadata = {
   title: {
     default: "Sign In",
@@ -28,20 +30,20 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </Link>
           <div className="mt-12">
             <h2 className="text-3xl font-bold text-white leading-tight">
-              Professional landscape<br />
-              management, simplified.
+              Subcontractor field<br />
+              portal.
             </h2>
             <p className="mt-4 text-gray-400 leading-relaxed max-w-sm">
-              Manage your entire landscaping and snow removal business from one
-              place — estimates, crews, routes, and invoices.
+              View assigned work, start jobs with GPS, and submit before/after
+              photos from the field.
             </p>
           </div>
           <div className="mt-12 space-y-4">
             {[
-              "Estimates & contracts",
-              "Job scheduling & dispatch",
-              "Snow event management",
-              "Invoicing & payments",
+              "Assigned job list",
+              "GPS job start and finish",
+              "Required before photos",
+              "Required after photos",
             ].map((item) => (
               <div key={item} className="flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-redline flex items-center justify-center flex-shrink-0">
@@ -55,7 +57,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           </div>
         </div>
         <p className="text-xs text-gray-600">
-          © {new Date().getFullYear()} Redline Landscaping & Snow Removal
+          © {COPYRIGHT_YEAR} Redline Landscaping & Snow Removal
         </p>
       </div>
 

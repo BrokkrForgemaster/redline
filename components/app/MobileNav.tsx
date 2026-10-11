@@ -2,15 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Calendar, Users, Receipt, Briefcase } from "lucide-react";
+import { LayoutDashboard, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 const MOBILE_NAV = [
   { label: "Home", href: "/dashboard", icon: LayoutDashboard },
   { label: "My Jobs", href: "/my-jobs", icon: Briefcase },
-  { label: "Calendar", href: "/calendar", icon: Calendar },
-  { label: "Customers", href: "/customers", icon: Users },
-  { label: "Invoices", href: "/invoices", icon: Receipt },
 ];
 
 export default function MobileNav() {
