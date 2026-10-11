@@ -16,22 +16,113 @@ interface Props {
   onMenuClick: () => void;
 }
 
+interface NotificationItem {
+  id: string;
+  title: string;
+  body: string;
+  action_url: string | null;
+  created_at: string;
+  read: boolean;
+}
+
+interface NotificationQueryClient {
+  from(table: "notifications"): {
+    select(
+      columns: string,
+      options?: { count?: "exact" }
+    ): {
+      eq(column: string, value: string | boolean): {
+        eq(column: string, value: string | boolean): {
+          order(column: string, options: { ascending: boolean }): {
+            limit(count: number): Promise<{ data: NotificationItem[] | null; count: number | null }>;
+          };
+        };
+        order(column: string, options: { ascending: boolean }): {
+          limit(count: number): Promise<{ data: NotificationItem[] | null; count: number | null }>;
+        };
+      };
+    };
+    update(values: Record<string, unknown>): {
+      eq(column: string, value: string | boolean): {
+        eq(column: string, value: string | boolean): Promise<unknown>;
+      } & Promise<unknown>;
+    };
+  };
+}
+
 export default function TopBar({ profile, onMenuClick }: Props) {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<AudioContext | null>(null);
   const displayName = getProfileDisplayName(profile);
   const initials = getProfileInitials(profile);
+
+  function playAlertTone() {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+
+      const ctx = audioRef.current ?? new AudioContextCtor();
+      audioRef.current = ctx;
+      if (ctx.state === "suspended") void ctx.resume();
+
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+      oscillator.frequency.setValueAtTime(1175, ctx.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.32);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.35);
+    } catch {
+      // Browser autoplay/audio policy can block this until the first user gesture.
+    }
+  }
+
+  function showSystemNotification(notification: NotificationItem) {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const payload = {
+      title: notification.title || "Redline alert",
+      body: notification.body || "New alert",
+      url: notification.action_url || "/dashboard",
+      tag: notification.id,
+    };
+
+    if (navigator.serviceWorker?.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: "SHOW_NOTIFICATION",
+        payload,
+      });
+      return;
+    }
+
+    new Notification(payload.title, {
+      body: payload.body,
+      icon: "/images/logo.png",
+      data: { url: payload.url },
+    });
+  }
 
   useEffect(() => {
     function handleOnline() { setIsOnline(true); }
     function handleOffline() { setIsOnline(false); }
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
-    setIsOnline(navigator.onLine);
+    const id = window.setTimeout(() => setIsOnline(navigator.onLine), 0);
     return () => {
+      window.clearTimeout(id);
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
@@ -42,15 +133,16 @@ export default function TopBar({ profile, onMenuClick }: Props) {
     let latestSeenCreatedAt: string | null = null;
 
     async function loadUnread(showToastForNew = false) {
-      const { data, count } = await (supabase as any)
+      const { data, count } = await (supabase as unknown as NotificationQueryClient)
         .from("notifications")
-        .select("id, title, body, created_at", { count: "exact" })
+        .select("id, title, body, action_url, created_at, read", { count: "exact" })
         .eq("user_id", profile.id)
         .eq("read", false)
         .order("created_at", { ascending: false })
-        .limit(5);
+        .limit(10);
 
       setUnreadCount(count ?? 0);
+      setNotifications((data ?? []) as NotificationItem[]);
 
       const newest = data?.[0] as { title: string; body: string; created_at: string } | undefined;
       if (!newest) return;
@@ -62,6 +154,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
 
       if (showToastForNew && newest.created_at > latestSeenCreatedAt) {
         latestSeenCreatedAt = newest.created_at;
+        playAlertTone();
         toast.info(newest.title, { description: newest.body });
         router.refresh();
       }
@@ -75,9 +168,12 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` },
         (payload) => {
-          const next = payload.new as { title?: string; body?: string; created_at?: string };
+          const next = payload.new as NotificationItem;
           if (next.created_at) latestSeenCreatedAt = next.created_at;
           setUnreadCount((count) => count + 1);
+          setNotifications((items) => [next, ...items].slice(0, 10));
+          playAlertTone();
+          showSystemNotification(next);
           toast.info(next.title ?? "New alert", { description: next.body });
           router.refresh();
         }
@@ -95,10 +191,39 @@ export default function TopBar({ profile, onMenuClick }: Props) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setUserMenuOpen(false);
       }
+      if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  async function handleNotificationClick(notification: NotificationItem) {
+    const supabase = createClient();
+    if (!notification.read) {
+      await (supabase as unknown as NotificationQueryClient)
+        .from("notifications")
+        .update({ read: true, read_at: new Date().toISOString() })
+        .eq("id", notification.id)
+        .eq("user_id", profile.id);
+      setNotifications((items) => items.filter((item) => item.id !== notification.id));
+      setUnreadCount((count) => Math.max(0, count - 1));
+    }
+    setNotificationsOpen(false);
+    if (notification.action_url) router.push(notification.action_url);
+  }
+
+  async function markAllRead() {
+    const supabase = createClient();
+    await (supabase as unknown as NotificationQueryClient)
+      .from("notifications")
+      .update({ read: true, read_at: new Date().toISOString() })
+      .eq("user_id", profile.id)
+      .eq("read", false);
+    setNotifications([]);
+    setUnreadCount(0);
+  }
 
   async function handleSignOut() {
     const supabase = createClient();
@@ -146,14 +271,78 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         </div>
 
         {/* Notifications */}
-        <button className="relative p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors" aria-label="Notifications">
-          <Bell size={20} />
-          {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-redline px-1 text-[10px] font-bold leading-4 text-white text-center">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
+        <div className="relative" ref={notificationsRef}>
+          <button
+            type="button"
+            onClick={() => {
+              setNotificationsOpen((open) => !open);
+              if (!audioRef.current) playAlertTone();
+            }}
+            className="relative p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors"
+            aria-label="Notifications"
+            aria-expanded={notificationsOpen}
+            aria-haspopup="true"
+          >
+            <Bell size={20} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-redline px-1 text-[10px] font-bold leading-4 text-white text-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {notificationsOpen && (
+            <div className="absolute right-0 top-full mt-1 w-80 max-w-[calc(100vw-2rem)] bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+              <div className="flex items-center justify-between gap-3 px-4 py-2 border-b border-gray-100">
+                <div>
+                  <p className="text-sm font-semibold text-charcoal">Alerts</p>
+                  <p className="text-xs text-muted">{unreadCount} active</p>
+                </div>
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={markAllRead}
+                    className="text-xs font-semibold text-redline hover:underline"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-96 overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="px-4 py-6 text-center">
+                    <p className="text-sm font-medium text-charcoal">No active alerts</p>
+                    <p className="text-xs text-muted mt-1">New job alerts will appear here.</p>
+                  </div>
+                ) : (
+                  notifications.map((notification) => (
+                    <button
+                      key={notification.id}
+                      type="button"
+                      onClick={() => handleNotificationClick(notification)}
+                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="mt-1.5 h-2 w-2 rounded-full bg-redline flex-shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-charcoal leading-tight">{notification.title}</p>
+                          <p className="text-xs text-muted mt-1 leading-snug">{notification.body}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {new Date(notification.created_at).toLocaleTimeString("en-US", {
+                              hour: "numeric",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
           )}
-        </button>
+        </div>
 
         {/* User menu */}
         <div className="relative" ref={menuRef}>

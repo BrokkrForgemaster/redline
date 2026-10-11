@@ -222,4 +222,32 @@ self.addEventListener("message", (event) => {
   if (event.data?.type === "CLEAR_APP_CACHE") {
     caches.delete(PAGES_CACHE);
   }
+  if (event.data?.type === "SHOW_NOTIFICATION") {
+    const payload = event.data.payload ?? {};
+    event.waitUntil(
+      self.registration.showNotification(payload.title || "Redline alert", {
+        body: payload.body || "New alert",
+        icon: "/images/logo.png",
+        badge: "/images/logo.png",
+        tag: payload.tag || "redline-alert",
+        data: { url: payload.url || "/dashboard" },
+      })
+    );
+  }
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const targetUrl = event.notification.data?.url || "/dashboard";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.navigate(targetUrl);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(targetUrl);
+    })
+  );
 });
