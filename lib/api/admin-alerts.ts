@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { ADMIN_EMAIL, DEVELOPER_EMAIL } from "@/lib/auth/privileged-users";
+import { ADMIN_EMAILS, DEVELOPER_EMAILS } from "@/lib/auth/privileged-users";
 
 type RunAlertEvent = "start" | "finish";
 
@@ -10,12 +10,13 @@ export async function notifyPrivilegedUsersOfRunEvent(params: {
   actorId: string;
 }) {
   const admin = createAdminClient() as any;
+  const recipientEmails = [...ADMIN_EMAILS, ...DEVELOPER_EMAILS];
 
   const [{ data: recipients }, { data: run }] = await Promise.all([
     admin
       .from("profiles")
       .select("id, email")
-      .in("email", [ADMIN_EMAIL, DEVELOPER_EMAIL])
+      .in("email", recipientEmails)
       .eq("status", "active"),
     admin
       .from("service_runs")
@@ -39,7 +40,7 @@ export async function notifyPrivilegedUsersOfRunEvent(params: {
   const action = params.event === "start" ? "started" : "ended";
   const body = `${worker} ${action} ${workOrder?.work_order_number ?? "a work order"}${workOrder?.title ? `: ${workOrder.title}` : ""}.`;
 
-  await admin.from("notifications").insert(
+  const { error } = await admin.from("notifications").insert(
     recipientIds.map((userId) => ({
       user_id: userId,
       type: `service_run_${params.event}`,
@@ -50,4 +51,8 @@ export async function notifyPrivilegedUsersOfRunEvent(params: {
       entity_id: params.serviceRunId,
     }))
   );
+
+  if (error) {
+    console.error("Failed to insert admin run notification", error);
+  }
 }

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { ADMIN_EMAILS, DEVELOPER_EMAILS } from "@/lib/auth/privileged-users";
 
 type GpsPayload = {
   latitude: number;
@@ -64,6 +65,55 @@ async function insertLocationTag(
   });
 }
 
+async function notifyPrivilegedUsersOfLegacyJobEvent(
+  event: "start" | "finish",
+  jobId: string,
+  actorId: string
+) {
+  const admin = getAdminClient();
+  const recipientEmails = [...ADMIN_EMAILS, ...DEVELOPER_EMAILS];
+
+  const [{ data: recipients }, { data: job }, { data: actor }] = await Promise.all([
+    admin
+      .from("profiles")
+      .select("id")
+      .in("email", recipientEmails)
+      .eq("status", "active"),
+    admin
+      .from("jobs")
+      .select("job_number, title")
+      .eq("id", jobId)
+      .single(),
+    admin
+      .from("profiles")
+      .select("first_name, last_name, email")
+      .eq("id", actorId)
+      .single(),
+  ]);
+
+  const recipientIds = ((recipients ?? []) as { id: string }[]).map((recipient) => recipient.id);
+  if (recipientIds.length === 0) return;
+
+  const worker = actor ? `${actor.first_name} ${actor.last_name}`.trim() || actor.email : "A subcontractor";
+  const action = event === "start" ? "started" : "ended";
+  const title = event === "start" ? "Job started" : "Job ended";
+  const body = `${worker} ${action} ${job?.job_number ?? "a job"}${job?.title ? `: ${job.title}` : ""}.`;
+
+  const { error } = await admin.from("notifications").insert(
+    recipientIds.map((userId) => ({
+      user_id: userId,
+      type: `job_${event}`,
+      title,
+      body,
+      action_url: `/jobs/${jobId}`,
+      entity_type: "job",
+      entity_id: jobId,
+    }))
+  );
+
+  if (error) console.error("Failed to insert admin legacy job notification", error);
+}
+
 export async function clockIn(jobId: string, gps?: GpsPayload | null) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -101,6 +151,9 @@ export async function clockIn(jobId: string, gps?: GpsPayload | null) {
     .in("status", ["scheduled", "en_route", "arrived", "approved", "ready_to_schedule"]);
 
   await insertLocationTag(supabase, jobId, user.id, "start", gps ?? null);
+  await notifyPrivilegedUsersOfLegacyJobEvent("start", jobId, user.id).catch((error) => {
+    console.error("Failed to notify privileged users of job start", error);
+  });
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");
@@ -125,6 +178,9 @@ export async function clockOut(entryId: string, jobId: string, gps?: GpsPayload 
   if (error || !updatedEntry) return { error: "Failed to clock out. Please try again." };
 
   await insertLocationTag(supabase, jobId, user.id, "finish", gps ?? null);
+  await notifyPrivilegedUsersOfLegacyJobEvent("finish", jobId, user.id).catch((error) => {
+    console.error("Failed to notify privileged users of job finish", error);
+  });
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");

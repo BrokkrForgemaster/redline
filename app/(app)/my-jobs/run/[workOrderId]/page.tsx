@@ -869,6 +869,22 @@ function PhotoSection({ label, hint, count, uploading, inputRef, disabled, onCha
       ? "border-dashed border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700"
       : "border-dashed border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-700";
 
+  async function openCameraInput() {
+    if (disabled || uploading || !inputRef.current) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("A camera is required to take job photos on this device.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+      stream.getTracks().forEach((track) => track.stop());
+      inputRef.current.click();
+    } catch {
+      toast.error("Camera access is required to take a new job photo.");
+    }
+  }
+
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
       <div className="flex items-start justify-between gap-3">
@@ -910,24 +926,28 @@ function PhotoSection({ label, hint, count, uploading, inputRef, disabled, onCha
       </div>
 
       {/* Add photo button */}
-      <label className={`block cursor-pointer ${disabled ? "pointer-events-none opacity-50" : ""}`}>
-        <div className={`flex items-center justify-center gap-2 py-3 rounded-xl border transition-colors ${addBtnCls}`}>
+      <div className={disabled ? "opacity-50" : ""}>
+        <button
+          type="button"
+          onClick={openCameraInput}
+          disabled={disabled || uploading}
+          className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border transition-colors ${addBtnCls}`}
+        >
           {uploading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
           <span className="text-sm font-semibold">
             {uploading ? "Uploading…" : met ? "Add More Photos" : `Take ${label.split(" ")[0]} Photo`}
           </span>
-        </div>
+        </button>
         <input
           ref={inputRef}
           type="file"
           accept="image/*"
           capture="environment"
-          multiple
           className="hidden"
           onChange={onChange}
           disabled={disabled}
         />
-      </label>
+      </div>
     </div>
   );
 }

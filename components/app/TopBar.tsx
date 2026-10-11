@@ -9,6 +9,7 @@ import type { Profile } from "@/types/database";
 import { Menu, Bell, Search, LogOut, User, Settings, ChevronDown, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { getProfileDisplayName, getProfileInitials } from "@/lib/auth/profile-display";
+import { toast } from "sonner";
 
 interface Props {
   profile: Profile;
@@ -19,6 +20,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   const router = useRouter();
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
+  const [unreadCount, setUnreadCount] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const displayName = getProfileDisplayName(profile);
   const initials = getProfileInitials(profile);
@@ -34,6 +36,59 @@ export default function TopBar({ profile, onMenuClick }: Props) {
       window.removeEventListener("offline", handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    const supabase = createClient();
+    let latestSeenCreatedAt: string | null = null;
+
+    async function loadUnread(showToastForNew = false) {
+      const { data, count } = await (supabase as any)
+        .from("notifications")
+        .select("id, title, body, created_at", { count: "exact" })
+        .eq("user_id", profile.id)
+        .eq("read", false)
+        .order("created_at", { ascending: false })
+        .limit(5);
+
+      setUnreadCount(count ?? 0);
+
+      const newest = data?.[0] as { title: string; body: string; created_at: string } | undefined;
+      if (!newest) return;
+
+      if (!latestSeenCreatedAt) {
+        latestSeenCreatedAt = newest.created_at;
+        return;
+      }
+
+      if (showToastForNew && newest.created_at > latestSeenCreatedAt) {
+        latestSeenCreatedAt = newest.created_at;
+        toast.info(newest.title, { description: newest.body });
+        router.refresh();
+      }
+    }
+
+    loadUnread(false);
+    const interval = window.setInterval(() => loadUnread(true), 15000);
+    const channel = supabase
+      .channel(`notifications:${profile.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` },
+        (payload) => {
+          const next = payload.new as { title?: string; body?: string; created_at?: string };
+          if (next.created_at) latestSeenCreatedAt = next.created_at;
+          setUnreadCount((count) => count + 1);
+          toast.info(next.title ?? "New alert", { description: next.body });
+          router.refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      window.clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
+  }, [profile.id, router]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -93,7 +148,11 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         {/* Notifications */}
         <button className="relative p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors" aria-label="Notifications">
           <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-redline rounded-full" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 rounded-full bg-redline px-1 text-[10px] font-bold leading-4 text-white text-center">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
+          )}
         </button>
 
         {/* User menu */}

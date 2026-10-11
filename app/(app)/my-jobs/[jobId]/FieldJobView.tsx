@@ -210,8 +210,42 @@ export default function FieldJobView({
     e.target.value = "";
   }
 
+  async function openCameraInput(input: HTMLInputElement | null) {
+    if (!input || isUploading) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      toast.error("A camera is required to take job photos on this device.");
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } } });
+      stream.getTracks().forEach((track) => track.stop());
+      input.click();
+    } catch {
+      toast.error("Camera access is required to take a new job photo.");
+    }
+  }
+
   return (
     <div className="max-w-lg mx-auto space-y-4 pb-28">
+      <input
+        ref={beforeRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={e => handlePhotoChange(e, "before")}
+        disabled={isUploading}
+      />
+      <input
+        ref={afterRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={e => handlePhotoChange(e, "after")}
+        disabled={isUploading}
+      />
 
       {/* Back */}
       <Link
@@ -302,8 +336,13 @@ export default function FieldJobView({
             )}
 
             {localBefore < BEFORE_REQUIRED && (
-              <label className="block cursor-pointer">
-                <div className={`flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-amber-300 bg-amber-50 hover:bg-amber-100 active:bg-amber-200"}`}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => openCameraInput(beforeRef.current)}
+                  disabled={isUploading}
+                  className={`w-full flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-amber-300 bg-amber-50 hover:bg-amber-100 active:bg-amber-200"}`}
+                >
                   {isUploading ? (
                     <Loader2 size={20} className="text-gray-400 animate-spin" />
                   ) : (
@@ -312,34 +351,20 @@ export default function FieldJobView({
                   <span className="font-semibold text-amber-700">
                     {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : `Take Before Photos (${localBefore}/${BEFORE_REQUIRED})`}
                   </span>
-                </div>
-                <input
-                  ref={beforeRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  onChange={e => handlePhotoChange(e, "before")}
-                  disabled={isUploading}
-                />
-              </label>
+                </button>
+              </div>
             )}
 
             {canStart && (
-              <label className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium cursor-pointer hover:underline">
+              <button
+                type="button"
+                onClick={() => openCameraInput(beforeRef.current)}
+                disabled={isUploading}
+                className="flex w-full items-center justify-center gap-2 text-sm text-green-600 font-medium hover:underline disabled:opacity-60"
+              >
                 <Camera size={14} />
                 Add more before photos
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  onChange={e => handlePhotoChange(e, "before")}
-                  disabled={isUploading}
-                />
-              </label>
+              </button>
             )}
           </div>
 
@@ -391,8 +416,13 @@ export default function FieldJobView({
             )}
 
             {localAfter < AFTER_REQUIRED && (
-              <label className="block cursor-pointer">
-                <div className={`flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-blue-300 bg-blue-50 hover:bg-blue-100 active:bg-blue-200"}`}>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => openCameraInput(afterRef.current)}
+                  disabled={isUploading}
+                  className={`w-full flex items-center justify-center gap-3 py-5 rounded-xl border-2 border-dashed transition-colors ${isUploading ? "border-gray-200 bg-gray-50 opacity-60" : "border-blue-300 bg-blue-50 hover:bg-blue-100 active:bg-blue-200"}`}
+                >
                   {isUploading ? (
                     <Loader2 size={20} className="text-gray-400 animate-spin" />
                   ) : (
@@ -401,34 +431,20 @@ export default function FieldJobView({
                   <span className="font-semibold text-blue-700">
                     {gps.acquiring ? "Getting GPS..." : isUploading ? "Uploading..." : `Take After Photos (${localAfter}/${AFTER_REQUIRED})`}
                   </span>
-                </div>
-                <input
-                  ref={afterRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  onChange={e => handlePhotoChange(e, "after")}
-                  disabled={isUploading}
-                />
-              </label>
+                </button>
+              </div>
             )}
 
             {canClockOut && (
-              <label className="flex items-center justify-center gap-2 text-sm text-green-600 font-medium cursor-pointer hover:underline">
+              <button
+                type="button"
+                onClick={() => openCameraInput(afterRef.current)}
+                disabled={isUploading}
+                className="flex w-full items-center justify-center gap-2 text-sm text-green-600 font-medium hover:underline disabled:opacity-60"
+              >
                 <Camera size={14} />
                 Add more after photos
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  multiple
-                  className="hidden"
-                  onChange={e => handlePhotoChange(e, "after")}
-                  disabled={isUploading}
-                />
-              </label>
+              </button>
             )}
           </div>
 
