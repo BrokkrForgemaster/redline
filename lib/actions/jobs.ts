@@ -46,7 +46,7 @@ export async function createJob(input: JobInput) {
       contract_id: d.contractId ?? null,
       service_type: d.serviceType,
       priority: d.priority,
-      status: "pending_approval",
+      status: "approved",
       title: d.title,
       description: d.description ?? null,
       crew_id: d.crewId ?? null,

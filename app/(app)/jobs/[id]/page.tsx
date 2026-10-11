@@ -8,6 +8,8 @@ import {
   Calendar, AlertTriangle, ClipboardList, Camera, ImageOff
 } from "lucide-react";
 import JobStatusUpdater from "./JobStatusUpdater";
+import JobLocationMapWrapper from "@/components/app/JobLocationMapWrapper";
+import type { LocationTag } from "@/components/app/JobLocationMap";
 
 const PRIORITY_COLORS: Record<string, "gray" | "blue" | "yellow" | "red"> = {
   low: "gray",
@@ -67,7 +69,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   if (!job) notFound();
 
-  const [{ data: assignments }, { data: timeEntries }, { data: photos }] = await Promise.all([
+  const [{ data: assignments }, { data: timeEntries }, { data: photos }, { data: rawTags }] = await Promise.all([
     supabase
       .from("job_assignments")
       .select("id, role, profiles!employee_id(first_name, last_name)")
@@ -82,7 +84,24 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
       .select("id, url, photo_type, created_at, profiles!employee_id(first_name, last_name)")
       .eq("job_id", id)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("job_location_tags")
+      .select("id, tag_type, latitude, longitude, captured_at_device, profiles!employee_id(first_name, last_name)")
+      .eq("job_id", id)
+      .order("captured_at_device", { ascending: true }),
   ]);
+
+  const locationTags: LocationTag[] = (rawTags ?? []).map(t => {
+    const p = t.profiles as unknown as { first_name: string; last_name: string } | null;
+    return {
+      id: t.id,
+      tag_type: t.tag_type,
+      latitude: Number(t.latitude),
+      longitude: Number(t.longitude),
+      captured_at_device: t.captured_at_device,
+      employee_name: p ? `${p.first_name} ${p.last_name}` : "Unknown",
+    };
+  });
 
   const customer = job.customers as unknown as { id: string; first_name: string; last_name: string; business_name: string | null; account_type: string } | null;
   const property = job.properties as unknown as { id: string; address_line1: string; city: string; state: string; property_name: string | null } | null;
@@ -344,6 +363,21 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               </div>
             )}
           </div>
+
+          {locationTags.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                <h2 className="font-semibold text-charcoal flex items-center gap-2 text-sm">
+                  <MapPin size={14} className="text-muted" />
+                  GPS Locations
+                </h2>
+                <span className="text-xs text-muted">{locationTags.length} tag{locationTags.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="h-[220px]">
+                <JobLocationMapWrapper tags={locationTags} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

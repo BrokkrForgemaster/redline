@@ -59,9 +59,8 @@ export default async function JobsPage({
     .from("jobs")
     .select(`id, job_number, title, status, priority, scheduled_date, service_type,
       customers(id, first_name, last_name, business_name, account_type), crews(id, name)`)
-    .gte("scheduled_date", monthStart)
-    .lte("scheduled_date", monthEnd)
-    .order("scheduled_date", { ascending: true })
+    .or(`scheduled_date.is.null,and(scheduled_date.gte.${monthStart},scheduled_date.lte.${monthEnd})`)
+    .order("scheduled_date", { ascending: true, nullsFirst: true })
     .order("created_at", { ascending: true })
     .limit(500);
 
