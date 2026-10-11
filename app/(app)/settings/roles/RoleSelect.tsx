@@ -7,16 +7,10 @@ import { Loader2 } from "lucide-react";
 
 const ROLES = [
   "developer",
-  "administrator",
-  "operations_manager",
-  "office_manager",
-  "estimator",
+  "owner",
+  "subcontractor",
   "crew_leader",
   "crew_member",
-  "snow_operations_manager",
-  "inventory_manager",
-  "bookkeeper",
-  "read_only",
 ];
 
 interface Props {

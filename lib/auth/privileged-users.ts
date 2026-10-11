@@ -17,5 +17,5 @@ export function getEffectiveRole(
 }
 
 export function canViewOperationsDashboard(role: string) {
-  return ["developer", "owner", "administrator", "operations_manager", "snow_operations_manager"].includes(role);
+  return ["developer", "owner"].includes(role);
 }

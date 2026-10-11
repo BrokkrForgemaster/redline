@@ -6,18 +6,11 @@ import type { Profile } from "@/types/database";
 export const metadata = { title: "Roles & Permissions" };
 
 const ROLE_LABELS: Record<string, string> = {
-  owner: "Owner",
   developer: "Developer",
-  administrator: "Administrator",
-  operations_manager: "Operations Manager",
-  office_manager: "Office Manager",
-  estimator: "Estimator",
+  owner: "Owner",
+  subcontractor: "Subcontractor",
   crew_leader: "Crew Leader",
   crew_member: "Crew Member",
-  snow_operations_manager: "Snow Ops Manager",
-  inventory_manager: "Inventory Manager",
-  bookkeeper: "Bookkeeper",
-  read_only: "Read Only",
 };
 
 export default async function RolesPage() {
@@ -40,18 +33,13 @@ export default async function RolesPage() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="font-semibold text-charcoal mb-3 text-sm">Role Descriptions</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-muted">
-          <div><span className="font-medium text-charcoal">Administrator</span> — Full access to all features</div>
-          <div><span className="font-medium text-charcoal">Operations Manager</span> — Jobs, crews, scheduling</div>
-          <div><span className="font-medium text-charcoal">Office Manager</span> — Customers, estimates, invoices</div>
-          <div><span className="font-medium text-charcoal">Estimator</span> — Create and manage estimates</div>
-          <div><span className="font-medium text-charcoal">Crew Leader</span> — View and update assigned jobs</div>
-          <div><span className="font-medium text-charcoal">Crew Member</span> — Clock in/out, view schedule</div>
-          <div><span className="font-medium text-charcoal">Snow Ops Manager</span> — Snow events and routes</div>
-          <div><span className="font-medium text-charcoal">Inventory Manager</span> — Products and purchase orders</div>
-          <div><span className="font-medium text-charcoal">Bookkeeper</span> — Invoices and payments</div>
-          <div><span className="font-medium text-charcoal">Read Only</span> — View-only access</div>
+        <h2 className="font-semibold text-charcoal mb-3 text-sm">Role Hierarchy</h2>
+        <div className="flex flex-col gap-2 text-xs text-muted">
+          <div><span className="font-medium text-charcoal">Developer</span> — Full system access including developer tools</div>
+          <div><span className="font-medium text-charcoal">Owner</span> — Full access to all features, settings, and reports</div>
+          <div><span className="font-medium text-charcoal">Subcontractor</span> — View and complete assigned work orders</div>
+          <div><span className="font-medium text-charcoal">Crew Leader</span> — Manage crew, view and update assigned jobs</div>
+          <div><span className="font-medium text-charcoal">Crew Member</span> — Clock in/out, view assigned schedule</div>
         </div>
       </div>
 
@@ -94,7 +82,7 @@ export default async function RolesPage() {
                   <td className="px-5 py-3">
                     <RoleSelect
                       profileId={profile.id}
-                      currentRole={profile.role ?? "read_only"}
+                      currentRole={profile.role ?? "crew_member"}
                       roleLabels={ROLE_LABELS}
                     />
                   </td>

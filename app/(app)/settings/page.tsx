@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Building2, Shield, Bell, Users, DollarSign, Palette, UserCircle } from "lucide-react";
+import { Building2, Shield, Bell, Users, Palette, UserCircle } from "lucide-react";
 
 export const metadata = { title: "Settings" };
 
@@ -11,7 +11,7 @@ export default async function SettingsPage() {
   if (!user) redirect("/auth/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  const isAdmin = profile?.role === "owner" || profile?.role === "administrator";
+  const isAdmin = profile?.role === "owner" || profile?.role === "developer";
 
   const { data: settings } = await supabase.from("business_settings").select("*").single();
 
@@ -19,7 +19,6 @@ export default async function SettingsPage() {
     { icon: UserCircle, label: "My Profile", description: "Name, photo, phone number", href: "/settings/profile", adminOnly: false },
     { icon: Building2, label: "Business Information", description: "Name, address, logo, tax ID", href: "/settings/business", adminOnly: true },
     { icon: Palette, label: "Branding & PDFs", description: "Logo, colors, PDF footer, terms", href: "/settings/branding", adminOnly: true },
-    { icon: DollarSign, label: "Invoicing & Taxes", description: "Tax rates, payment terms, prefixes", href: "/settings/invoicing", adminOnly: true },
     { icon: Users, label: "Roles & Permissions", description: "Manage employee roles", href: "/settings/roles", adminOnly: true },
     { icon: Bell, label: "Notifications", description: "Configure notifications", href: "/settings/notifications", adminOnly: false },
     { icon: Shield, label: "Security & MFA", description: "Password, MFA, sessions", href: "/settings/security", adminOnly: false },

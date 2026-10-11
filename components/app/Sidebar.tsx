@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import type { Profile } from "@/types/database";
 import { cn } from "@/lib/utils/cn";
-import { canViewOperationsDashboard } from "@/lib/auth/privileged-users";
 import { getProfileDisplayName, getProfileInitials } from "@/lib/auth/profile-display";
 
 interface NavItem {
@@ -18,11 +17,11 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "□" },
-  { label: "My Jobs", href: "/my-jobs", icon: "▣", roles: ["crew_member", "crew_leader"] },
-  { label: "Jobs", href: "/jobs", icon: "▣", roles: ["developer", "owner", "administrator", "operations_manager", "snow_operations_manager"] },
-  { label: "Service Runs", href: "/service-runs", icon: "○", roles: ["developer", "owner", "administrator", "operations_manager", "snow_operations_manager"] },
-  { label: "Crews", href: "/crews", icon: "◇", roles: ["developer", "owner", "administrator", "operations_manager", "snow_operations_manager"] },
-  { label: "Settings", href: "/settings", icon: "⚙", roles: ["developer", "owner", "administrator"] },
+  { label: "My Jobs", href: "/my-jobs", icon: "▣", roles: ["crew_member", "crew_leader", "subcontractor"] },
+  { label: "Jobs", href: "/jobs", icon: "▣", roles: ["developer", "owner"] },
+  { label: "Service Runs", href: "/service-runs", icon: "○", roles: ["developer", "owner"] },
+  { label: "Crews", href: "/crews", icon: "◇", roles: ["developer", "owner"] },
+  { label: "Settings", href: "/settings", icon: "⚙", roles: ["developer", "owner"] },
 ];
 
 interface Props {
@@ -56,7 +55,6 @@ export default function Sidebar({ profile, mobile, onClose }: Props) {
   const initials = getProfileInitials(profile);
   const visibleItems = NAV_ITEMS.filter(item => {
     if (!item.roles) return true;
-    if (canViewOperationsDashboard(role) && item.roles.includes("administrator")) return true;
     return item.roles.includes(role);
   });
 
