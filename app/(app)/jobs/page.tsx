@@ -1,19 +1,12 @@
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { formatDate } from "@/lib/utils/format";
 import StatusBadge, { jobStatusBadge } from "@/components/ui/StatusBadge";
 import { Plus, Briefcase, ChevronLeft, ChevronRight, MapPin } from "lucide-react";
 import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 import JobsFilters from "@/components/app/JobsFilters";
+import JobsMapWrapper from "@/components/app/JobsMapWrapper";
 import type { JobMapMarker } from "@/components/app/JobsMap";
-
-const JobsMap = dynamic(() => import("@/components/app/JobsMap"), {
-  ssr: false,
-  loading: () => (
-    <div className="w-full h-[420px] rounded-b-xl bg-gray-100 animate-pulse" />
-  ),
-});
 
 export const metadata = { title: "Jobs" };
 
@@ -205,7 +198,7 @@ export default async function JobsPage({
               {mapMarkers.length} of {jobs?.length ?? 0} job{jobs?.length !== 1 ? "s" : ""} have GPS data
             </span>
           </div>
-          <JobsMap jobs={mapMarkers} />
+          <JobsMapWrapper jobs={mapMarkers} />
         </div>
       )}
 
