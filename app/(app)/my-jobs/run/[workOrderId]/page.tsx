@@ -49,6 +49,101 @@ interface PhotoState {
 }
 
 const MIN_PHOTOS = 3;
+const MAX_UPLOAD_BYTES = 19 * 1024 * 1024;
+const PHOTO_TARGET_BYTES = 8 * 1024 * 1024;
+const PHOTO_MAX_DIMENSION = 1800;
+const PHOTO_JPEG_QUALITY = 0.82;
+const PHOTO_PROCESS_TIMEOUT_MS = 15_000;
+const PHOTO_UPLOAD_TIMEOUT_MS = 45_000;
+
+function timeoutSignal(ms: number) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), ms);
+  return { signal: controller.signal, clear: () => window.clearTimeout(timeout) };
+}
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit) {
+  const timeout = timeoutSignal(PHOTO_UPLOAD_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: timeout.signal });
+  } finally {
+    timeout.clear();
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), PHOTO_UPLOAD_TIMEOUT_MS);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      }
+    );
+  });
+}
+
+function loadImageFromFile(file: File) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    const timeout = window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image load timed out"));
+    }, PHOTO_PROCESS_TIMEOUT_MS);
+
+    img.onload = () => {
+      window.clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      window.clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      reject(new Error("Unable to read image"));
+    };
+    img.src = url;
+  });
+}
+
+async function preparePhotoForUpload(file: File) {
+  if (!file.type.startsWith("image/")) return file;
+
+  try {
+    const img = await loadImageFromFile(file);
+    const scale = Math.min(1, PHOTO_MAX_DIMENSION / Math.max(img.naturalWidth, img.naturalHeight));
+    if (scale === 1 && file.size <= PHOTO_TARGET_BYTES) return file;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error("Photo processing timed out")), PHOTO_PROCESS_TIMEOUT_MS);
+      canvas.toBlob((result) => {
+        window.clearTimeout(timeout);
+        resolve(result);
+      }, "image/jpeg", PHOTO_JPEG_QUALITY);
+    });
+    if (!blob || blob.size >= file.size) return file;
+
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
+    return new File([blob], `${baseName}.jpg`, {
+      type: "image/jpeg",
+      lastModified: Date.now(),
+    });
+  } catch {
+    return file;
+  }
+}
 
 function formatElapsed(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -349,32 +444,55 @@ export default function ServiceRunPage() {
       e.target.value = "";
 
       setPhotos({ uploading: true });
+      const uploadWatchdog = window.setTimeout(() => {
+        setPhotos({ uploading: false });
+        toast.error("Photo upload is taking too long. Try again or use Upload Photo.");
+      }, PHOTO_UPLOAD_TIMEOUT_MS + 5_000);
       let saved = 0;
       let queued = 0;
 
       for (const file of files) {
+        const uploadFile = await preparePhotoForUpload(file);
+        if (uploadFile.size > MAX_UPLOAD_BYTES) {
+          toast.error("Photo is too large to upload. Retake it at a lower resolution or choose a smaller image.");
+          continue;
+        }
+
         let uploadedOnline = false;
         try {
-          const presignRes = await fetch(`/api/v1/service-runs/${run.serviceRunId}/media/presign`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mime_type: file.type, byte_size: file.size, evidence_type: evidenceType }),
-          });
+          const presignRes = await fetchWithTimeout(
+            `/api/v1/service-runs/${run.serviceRunId}/media/presign`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mime_type: uploadFile.type || "image/jpeg",
+                byte_size: uploadFile.size,
+                evidence_type: evidenceType,
+              }),
+            }
+          );
           if (!presignRes.ok) throw new Error("Presign failed");
           const { asset_id, bucket, path, token } = await presignRes.json();
 
           const supabase = createClient();
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { error: uploadError } = await (supabase.storage as any)
-            .from(bucket)
-            .uploadToSignedUrl(path, token, file, { contentType: file.type });
+          const { error: uploadError } = await withTimeout<{ error: Error | null }>(
+            (supabase.storage as any)
+              .from(bucket)
+              .uploadToSignedUrl(path, token, uploadFile, { contentType: uploadFile.type || "image/jpeg" }),
+            "Photo upload timed out. It has been queued to retry."
+          );
           if (uploadError) throw uploadError;
 
-          await fetch(`/api/v1/service-runs/${run.serviceRunId}/media/${asset_id}/complete`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ byte_size: file.size }),
-          });
+          await fetchWithTimeout(
+            `/api/v1/service-runs/${run.serviceRunId}/media/${asset_id}/complete`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ byte_size: uploadFile.size }),
+            }
+          );
 
           uploadedOnline = true;
           saved++;
@@ -386,11 +504,11 @@ export default function ServiceRunPage() {
           try {
             await outbox.enqueueMedia({
               service_run_id: run.serviceRunId,
-              blob: file,
-              filename: file.name || `photo-${Date.now()}.jpg`,
-              mime_type: file.type || "image/jpeg",
+              blob: uploadFile,
+              filename: uploadFile.name || `photo-${Date.now()}.jpg`,
+              mime_type: uploadFile.type || "image/jpeg",
               evidence_type: evidenceType,
-              byte_size: file.size,
+              byte_size: uploadFile.size,
               queued_at: new Date().toISOString(),
             });
             queued++;
@@ -400,6 +518,7 @@ export default function ServiceRunPage() {
         }
       }
 
+      window.clearTimeout(uploadWatchdog);
       setPhotos({ uploading: false });
 
       const countKey = evidenceType === "before" ? "beforeCount" : "afterCount";

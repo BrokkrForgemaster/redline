@@ -17,6 +17,8 @@ const MAX_UPLOAD_BYTES = 24 * 1024 * 1024;
 const PHOTO_TARGET_BYTES = 8 * 1024 * 1024;
 const PHOTO_MAX_DIMENSION = 1800;
 const PHOTO_JPEG_QUALITY = 0.82;
+const PHOTO_PROCESS_TIMEOUT_MS = 15_000;
+const PHOTO_UPLOAD_TIMEOUT_MS = 45_000;
 
 interface Job {
   id: string;
@@ -79,15 +81,37 @@ function loadImageFromFile(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const img = new Image();
+    const timeout = window.setTimeout(() => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image load timed out"));
+    }, PHOTO_PROCESS_TIMEOUT_MS);
     img.onload = () => {
+      window.clearTimeout(timeout);
       URL.revokeObjectURL(url);
       resolve(img);
     };
     img.onerror = () => {
+      window.clearTimeout(timeout);
       URL.revokeObjectURL(url);
       reject(new Error("Unable to read image"));
     };
     img.src = url;
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeout);
+        reject(error);
+      }
+    );
   });
 }
 
@@ -107,9 +131,13 @@ async function preparePhotoForUpload(file: File) {
 
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    const blob = await new Promise<Blob | null>((resolve) => {
-      canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY);
-    });
+    const blob = await withTimeout(
+      new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, "image/jpeg", PHOTO_JPEG_QUALITY);
+      }),
+      PHOTO_PROCESS_TIMEOUT_MS,
+      "Photo processing timed out"
+    );
     if (!blob || blob.size >= file.size) return file;
 
     const baseName = file.name.replace(/\.[^.]+$/, "") || "photo";
@@ -249,25 +277,33 @@ export default function FieldJobView({
 
     startUploadTransition(async () => {
       let saved = 0;
-      for (const file of files) {
-        const uploadFile = await preparePhotoForUpload(file);
-        if (uploadFile.size > MAX_UPLOAD_BYTES) {
-          toast.error("Photo is too large to upload. Retake it at a lower resolution or choose a smaller image.");
-          continue;
-        }
+      try {
+        for (const file of files) {
+          const uploadFile = await preparePhotoForUpload(file);
+          if (uploadFile.size > MAX_UPLOAD_BYTES) {
+            toast.error("Photo is too large to upload. Retake it at a lower resolution or choose a smaller image.");
+            continue;
+          }
 
-        const loc = await gps.acquire();
-        const fd = new FormData();
-        fd.append("file", uploadFile);
-        appendGps(fd, loc);
-        const result = await uploadJobPhoto(fd, job.id, type);
-        if (result.url) saved++;
-        else toast.error(result.error ?? "Upload failed.");
-      }
-      if (saved > 0) {
-        if (type === "before") setLocalBefore(n => n + saved);
-        else setLocalAfter(n => n + saved);
-        toast.success(`${saved} photo${saved !== 1 ? "s" : ""} saved.`);
+          const loc = await gps.acquire();
+          const fd = new FormData();
+          fd.append("file", uploadFile);
+          appendGps(fd, loc);
+          const result = await withTimeout(
+            uploadJobPhoto(fd, job.id, type),
+            PHOTO_UPLOAD_TIMEOUT_MS,
+            "Upload timed out. Check signal and try again."
+          );
+          if (result.url) saved++;
+          else toast.error(result.error ?? "Upload failed.");
+        }
+        if (saved > 0) {
+          if (type === "before") setLocalBefore(n => n + saved);
+          else setLocalAfter(n => n + saved);
+          toast.success(`${saved} photo${saved !== 1 ? "s" : ""} saved.`);
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Upload failed. Please try again.");
       }
     });
 
