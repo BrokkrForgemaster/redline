@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { createClient } from "@/lib/supabase/server";
 import { canViewOperationsDashboard, getEffectiveRole } from "@/lib/auth/privileged-users";
 import DashboardLiveRefresh from "@/components/app/DashboardLiveRefresh";
 import {
@@ -17,6 +17,7 @@ import {
 export const metadata = { title: "Dashboard" };
 
 type ProfileRow = { id: string; role: string; email: string | null };
+type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
 type JobRow = {
   id: string;
@@ -75,14 +76,15 @@ async function getCurrentUser() {
     user,
     profile: profile as ProfileRow,
     effectiveRole: getEffectiveRole(user.email, profile.role, profile.email),
+    supabase,
   };
 }
 
-async function loadAssignedJobs(userId: string) {
-  const admin = createAdminClient() as any;
+async function loadAssignedJobs(supabase: SupabaseServerClient, userId: string) {
+  const sb = supabase as any;
   const [{ data: direct }, { data: crews }] = await Promise.all([
-    admin.from("job_assignments").select("job_id").eq("employee_id", userId),
-    admin.from("crew_members").select("crew_id").eq("employee_id", userId),
+    sb.from("job_assignments").select("job_id").eq("employee_id", userId),
+    sb.from("crew_members").select("crew_id").eq("employee_id", userId),
   ]);
 
   const directIds = ((direct ?? []) as { job_id: string }[]).map((r) => r.job_id);
@@ -94,7 +96,7 @@ async function loadAssignedJobs(userId: string) {
 
   if (filters.length === 0) return [];
 
-  const { data } = await admin
+  const { data } = await sb
     .from("jobs")
     .select(`
       id, job_number, title, status, scheduled_start,
@@ -109,33 +111,34 @@ async function loadAssignedJobs(userId: string) {
 }
 
 async function loadOperationsDashboard() {
-  const admin = createAdminClient() as any;
+  const supabase = await createClient();
+  const sb = supabase as any;
   const [jobsResult, workOrdersResult, eventResult, locationsResult, crewsResult, usersResult] = await Promise.all([
-    admin
+    sb
       .from("jobs")
       .select("id, job_number, title, status, scheduled_start, customers(first_name, last_name, business_name), properties(address_line1, city, state)")
       .not("status", "in", "(cancelled,archived)")
       .order("scheduled_start", { ascending: true, nullsFirst: false })
       .limit(8),
-    admin
+    sb
       .from("work_orders")
       .select("id, work_order_number, title, status, scheduled_start, customers(first_name, last_name, business_name), properties(address_line1, city, state, latitude, longitude)")
       .not("status", "in", "(cancelled,completed,rejected)")
       .order("scheduled_start", { ascending: true, nullsFirst: false })
       .limit(8),
-    admin
+    sb
       .from("service_run_events")
       .select("id, event_type, created_at, service_run_id, profiles!service_run_events_actor_id_fkey(first_name, last_name, email), service_runs(work_orders(id, work_order_number, title))")
       .in("event_type", ["start", "finish"])
       .order("created_at", { ascending: false })
       .limit(8),
-    admin
+    sb
       .from("employee_location_points")
       .select("employee_id, latitude, longitude, accuracy_meters, captured_at_device, profiles(first_name, last_name, email)")
       .order("captured_at_device", { ascending: false })
       .limit(50),
-    admin.from("crews").select("id", { count: "exact", head: true }).eq("active", true),
-    admin.from("profiles").select("id", { count: "exact", head: true }).eq("status", "active").neq("role", "customer"),
+    sb.from("crews").select("id", { count: "exact", head: true }).eq("active", true),
+    sb.from("profiles").select("id", { count: "exact", head: true }).eq("status", "active").neq("role", "customer"),
   ]);
 
   const latestByEmployee = new Map<string, CrewLocationRow>();
@@ -159,14 +162,14 @@ async function loadOperationsDashboard() {
 }
 
 export default async function DashboardPage() {
-  const { user, effectiveRole } = await getCurrentUser();
+  const { user, effectiveRole, supabase } = await getCurrentUser();
 
   if (canViewOperationsDashboard(effectiveRole)) {
     const data = await loadOperationsDashboard();
     return <OperationsDashboard data={data} role={effectiveRole} />;
   }
 
-  const jobs = await loadAssignedJobs(user.id);
+  const jobs = await loadAssignedJobs(supabase, user.id);
   return <SubcontractorDashboard jobs={jobs} />;
 }
 
