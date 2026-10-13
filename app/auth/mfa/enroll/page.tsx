@@ -18,6 +18,8 @@ function EnrollMfa() {
   const [error, setError] = useState("");
   const [verified, setVerified] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [incomplete, setIncomplete] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -38,13 +40,59 @@ function EnrollMfa() {
         }
         if (!addAnother) { setVerified(true); return; }
       }
-      const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: "totp" });
-      if (!active) return;
-      if (enrollError || !enrolled?.totp) { setError("Could not start enrollment."); return; }
-      setFactor({ id: enrolled.id, qr: enrolled.totp.qr_code, secret: enrolled.totp.secret });
+      setIncomplete(data?.all?.some(item => item.factor_type === "totp" && item.status === "unverified") ?? false);
+      setReady(true);
     });
     return () => { active = false; };
   }, [router, next, addAnother]);
+
+  async function startEnrollment() {
+    setBusy(true);
+    setError("");
+    const supabase = createClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      setError("Your sign-in expired. Sign in again to set up an authenticator.");
+      setBusy(false);
+      return;
+    }
+    const { data: current, error: listError } = await supabase.auth.mfa.listFactors();
+    if (listError || !current) {
+      setError("Could not check your authentication factors. Try again.");
+      setBusy(false);
+      return;
+    }
+    if (current.totp?.some(item => item.status === "verified")) {
+      const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assuranceError || assurance?.currentLevel !== "aal2" ||
+          !hasRecentTotp(assurance.currentAuthenticationMethods)) {
+        setError("Verify with your existing authenticator before adding another one.");
+        setBusy(false);
+        return;
+      }
+    }
+    // A lost enrollment response leaves a factor without a recoverable secret.
+    // Only an explicit restart removes the signed-in user's unverified TOTP factors.
+    for (const pending of current.all.filter(item => item.factor_type === "totp" && item.status === "unverified")) {
+      const { error: removeError } = await supabase.auth.mfa.unenroll({ factorId: pending.id });
+      if (removeError) {
+        setError("Could not restart the incomplete setup. Try again or contact support.");
+        setBusy(false);
+        return;
+      }
+    }
+    const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    if (enrollError || !enrolled?.totp) {
+      setError(enrollError?.code === "mfa_totp_enroll_not_enabled"
+        ? "Authenticator enrollment is disabled in the authentication provider. Contact the site owner."
+        : "Could not start enrollment. Try again; if it continues, contact support.");
+      setBusy(false);
+      return;
+    }
+    setFactor({ id: enrolled.id, qr: enrolled.totp.qr_code, secret: enrolled.totp.secret });
+    setIncomplete(false);
+    setBusy(false);
+  }
 
   async function verify(event: React.FormEvent) {
     event.preventDefault();
@@ -68,7 +116,14 @@ function EnrollMfa() {
   return <main className="mx-auto max-w-md p-6 space-y-4">
     <h1 className="text-2xl font-semibold">Authenticator setup</h1>
     {verified ? <p>Authenticator verified. <Link href={next}>Continue</Link>.</p> : <>
-      <p>Scan this code with your authenticator app, then enter its first six-digit code.</p>
+      <p>Scan the code with your authenticator app, then enter its first six-digit code.</p>
+      {ready && !factor && <>
+        {incomplete && <p>An earlier setup was not verified. Restart it to get a new QR code.</p>}
+        <button type="button" onClick={startEnrollment} disabled={busy}
+          className="rounded bg-redline px-4 py-2 text-white disabled:opacity-50">
+          {busy ? "Preparing authenticator…" : incomplete ? "Restart setup" : "Start setup"}
+        </button>
+      </>}
       {factor && <><Image src={factor.qr} alt="Authenticator setup QR code" width={200} height={200} unoptimized />
         <p>Manual setup key: <code className="break-all">{factor.secret}</code></p>
         <form onSubmit={verify} className="space-y-3">
@@ -77,7 +132,9 @@ function EnrollMfa() {
             onChange={event => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
             className="block border rounded p-2" />
           <button type="submit" disabled={busy || code.length !== 6} className="bg-redline text-white rounded px-4 py-2 disabled:opacity-50">Verify and enable</button>
-        </form></>}
+        </form>
+        <button type="button" onClick={startEnrollment} disabled={busy}
+          className="text-sm underline disabled:opacity-50">Start over with a new code</button></>}
       {error && <p role="alert" className="text-red-700">{error}</p>}
     </>}
   </main>;
