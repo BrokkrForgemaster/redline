@@ -6,11 +6,10 @@ import { updateProfileRole } from "@/lib/actions/settings";
 import { Loader2 } from "lucide-react";
 
 const ROLES = [
-  "developer",
-  "owner",
+  "mowing_crew_lead",
+  "mowing_crew_laborer",
+  "snow_plow_operator",
   "subcontractor",
-  "crew_leader",
-  "crew_member",
 ];
 
 interface Props {
@@ -44,9 +43,10 @@ export default function RoleSelect({ profileId, currentRole, roleLabels }: Props
       <select
         value={role}
         onChange={handleChange}
-        disabled={isPending}
+        disabled={isPending || currentRole === "owner" || currentRole === "developer"}
         className="rounded-lg border border-border bg-white px-3 py-1.5 text-sm text-charcoal focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors disabled:opacity-60"
       >
+        {!ROLES.includes(role) && <option value={role}>Legacy: {roleLabels[role] ?? role.replaceAll("_", " ")}</option>}
         {ROLES.map((r) => (
           <option key={r} value={r}>
             {roleLabels[r] ?? r}

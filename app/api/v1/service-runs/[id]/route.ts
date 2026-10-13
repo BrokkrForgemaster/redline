@@ -1,13 +1,17 @@
-import { requireStaffUser } from "@/lib/api/auth";
+import { requireApiUser } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/errors";
+import { requireServiceRunAccess } from "@/lib/api/service-access";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireStaffUser("staff");
+  const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
 
   const { id } = await params;
+  const access = await requireServiceRunAccess(auth.supabase, auth.user.id, id);
+  if (!access.ok) return access.response;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = auth.supabase as any;
+  const sb = createAdminClient() as any;
 
   const { data: run, error: runError } = await sb
     .from("service_runs")

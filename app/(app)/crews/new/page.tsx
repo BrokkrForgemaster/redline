@@ -1,16 +1,18 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
 import NewCrewForm from "./NewCrewForm";
 
 export const metadata = { title: "New Crew" };
 
 export default async function NewCrewPage() {
-  const supabase = await createClient();
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return <p>Active Admin account with verified MFA required.</p>;
+  const supabase = access.supabase;
 
   const { data: employees } = await supabase
     .from("profiles")
     .select("id, first_name, last_name, role")
     .eq("status", "active")
-    .neq("role", "customer")
+    .eq("role", "mowing_crew_lead")
     .order("last_name");
 
   return (

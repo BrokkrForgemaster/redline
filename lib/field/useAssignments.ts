@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { openFieldDb, idbGet, idbPut, type SyncMetadataEntry } from "./db";
+import { openFieldDb, idbGet, idbPut } from "./db";
 import { createClient } from "@/lib/supabase/client";
 
-const CACHE_KEY = "assignments_cache";
+const CACHE_KEY = "assignments_cache:";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface WorkOrderAssignment {
@@ -93,10 +93,19 @@ export function useAssignments(): UseAssignmentsState {
       setLoading(true);
       setError(null);
 
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const user = session?.user;
+      if (!user || cancelled) {
+        if (!cancelled) { setData(null); setLoading(false); setError("Sign in to view assignments."); }
+        return;
+      }
+      const cacheKey = `${CACHE_KEY}${user.id}`;
+
       // Serve from cache immediately if fresh enough
       try {
         const db = await openFieldDb();
-        const cached = await idbGet<CachedAssignments>(db, "syncMetadata", CACHE_KEY);
+        const cached = await idbGet<CachedAssignments>(db, "syncMetadata", cacheKey);
         if (cached && !cancelled) {
           const age = Date.now() - new Date(cached.fetched_at).getTime();
           if (age < CACHE_TTL_MS) {
@@ -111,7 +120,6 @@ export function useAssignments(): UseAssignmentsState {
 
       // Always attempt fresh fetch
       try {
-        const supabase = createClient();
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -122,6 +130,8 @@ export function useAssignments(): UseAssignmentsState {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json: AssignmentsResult = await res.json();
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (!currentUser || currentUser.id !== user.id) return;
 
         if (!cancelled) {
           setData(json);
@@ -133,15 +143,8 @@ export function useAssignments(): UseAssignmentsState {
         // Write back to cache
         try {
           const db = await openFieldDb();
-          const entry: SyncMetadataEntry & { data: AssignmentsResult } = {
-            key: CACHE_KEY,
-            value: null,
-            data: json,
-            updated_at: new Date().toISOString(),
-          };
-          // Store using idbPut with a custom shape under syncMetadata
           const cacheRecord: CachedAssignments = {
-            key: CACHE_KEY,
+            key: cacheKey,
             data: json,
             fetched_at: new Date().toISOString(),
           };
@@ -153,14 +156,13 @@ export function useAssignments(): UseAssignmentsState {
         if (!cancelled) {
           const msg = err instanceof Error ? err.message : "Failed to load assignments.";
           setError(msg);
-          if (!data) setLoading(false);
+          setLoading(false);
         }
       }
     }
 
     load();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchTick]);
 
   return { data, loading, error, fromCache, refetch };

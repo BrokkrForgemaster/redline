@@ -1,101 +1,61 @@
-import { createClient } from "@/lib/supabase/server";
-import { formatCurrency } from "@/lib/utils/format";
-import { BarChart3, TrendingUp, Receipt, Users, Briefcase, Package } from "lucide-react";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { BarChart3, Briefcase, Camera, CheckCircle2, Users } from "lucide-react";
+import { hasMfaAssurance } from "@/lib/api/auth";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Reports" };
+export const metadata = { title: "Operational Reports" };
+
+const OPEN_STATUSES = ["scheduled", "assigned", "ready", "in_progress", "paused", "submitted", "needs_review"];
 
 export default async function ReportsPage() {
-  const supabase = await createClient();
+  const client = await createClient();
+  const { data: { user } } = await client.auth.getUser();
+  if (!user) redirect("/login");
+  const sb = createAdminClient();
+  const { data: profile, error: profileError } = await sb.from("profiles")
+    .select("role, status").eq("id", user.id).single();
+  if (profileError || profile?.status !== "active" || profile.role !== "owner") redirect("/dashboard");
+  if (!(await hasMfaAssurance(client))) redirect("/mfa/challenge");
 
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const startOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
-
-  const [
-    { data: revenueMonthData },
-    { data: revenueYearData },
-    { count: newCustomers },
-    { count: jobsCompleted },
-    { data: topCustomers },
-    { data: inventoryValue },
-  ] = await Promise.all([
-    supabase.from("payments").select("amount").gte("created_at", startOfMonth),
-    supabase.from("payments").select("amount").gte("created_at", startOfYear),
-    supabase.from("customers").select("*", { count: "exact", head: true }).gte("created_at", startOfMonth),
-    supabase.from("jobs").select("*", { count: "exact", head: true }).eq("status", "completed").gte("created_at", startOfMonth),
-    supabase.from("customers").select(`
-      id, first_name, last_name,
-      invoices(total, status)
-    `).limit(5),
-    supabase.from("products").select("current_quantity, purchase_cost").eq("active", true),
+  const [openOrders, completedVisits, awaitingReview, pendingEvidence, activeCrews] = await Promise.all([
+    sb.from("work_orders").select("id", { count: "exact", head: true }).in("status", OPEN_STATUSES),
+    sb.from("service_runs").select("id", { count: "exact", head: true }).eq("status", "completed"),
+    sb.from("service_runs").select("id", { count: "exact", head: true }).eq("status", "needs_review"),
+    sb.from("media_assets").select("id", { count: "exact", head: true }).eq("status", "pending_upload"),
+    sb.from("crews").select("id", { count: "exact", head: true }).eq("active", true),
   ]);
+  if ([openOrders, completedVisits, awaitingReview, pendingEvidence, activeCrews].some(result => result.error)) {
+    throw new Error("Operational report data is unavailable. Please retry.");
+  }
 
-  const revenueThisMonth = revenueMonthData?.reduce((sum, p) => sum + p.amount, 0) ?? 0;
-  const revenueThisYear = revenueYearData?.reduce((sum, p) => sum + p.amount, 0) ?? 0;
-  const totalInventoryValue = inventoryValue?.reduce((sum, p) => sum + (p.current_quantity * p.purchase_cost), 0) ?? 0;
-
-  const kpis = [
-    { label: "Revenue This Month", value: formatCurrency(revenueThisMonth), icon: TrendingUp, color: "text-lawn", bg: "bg-lawn/10" },
-    { label: "Revenue This Year", value: formatCurrency(revenueThisYear), icon: BarChart3, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "New Customers", value: newCustomers ?? 0, suffix: "this month", icon: Users, color: "text-purple-600", bg: "bg-purple-50" },
-    { label: "Jobs Completed", value: jobsCompleted ?? 0, suffix: "this month", icon: Briefcase, color: "text-orange-600", bg: "bg-orange-50" },
-    { label: "Inventory Value", value: formatCurrency(totalInventoryValue), icon: Package, color: "text-charcoal", bg: "bg-gray-100" },
-  ];
-
-  const reportLinks = [
-    { label: "Revenue by Period", href: "/reports/revenue", description: "Monthly and annual revenue breakdown" },
-    { label: "Invoice Aging", href: "/reports/aging", description: "Outstanding balances by age" },
-    { label: "Job Profitability", href: "/reports/profitability", description: "Revenue vs. estimated cost per job" },
-    { label: "Estimate Conversion", href: "/reports/conversion", description: "Lead-to-estimate-to-contract rates" },
-    { label: "Material Usage", href: "/reports/materials", description: "Inventory usage by job and period" },
-    { label: "Crew Workload", href: "/reports/crew-workload", description: "Hours and jobs per crew member" },
-    { label: "Snow Event Profitability", href: "/reports/snow", description: "Revenue and costs per event" },
-    { label: "Tax Summary", href: "/reports/tax", description: "Taxable revenue and tax collected" },
-    { label: "Customer Acquisition", href: "/reports/acquisition", description: "Lead sources and conversion" },
+  const metrics = [
+    { label: "Open work orders", value: openOrders.count ?? 0, icon: Briefcase },
+    { label: "Completed visits", value: completedVisits.count ?? 0, icon: CheckCircle2 },
+    { label: "Visits needing review", value: awaitingReview.count ?? 0, icon: BarChart3 },
+    { label: "Uploads awaiting attachment", value: pendingEvidence.count ?? 0, icon: Camera },
+    { label: "Active crews", value: activeCrews.count ?? 0, icon: Users },
   ];
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-charcoal">Reports</h1>
-        <p className="text-sm text-muted mt-1">Business performance and financial reports.</p>
+        <h1 className="text-2xl font-bold text-charcoal">Operational Reports</h1>
+        <p className="mt-1 text-sm text-muted">Current counts across authorized work. Pending phone data appears after synchronization.</p>
       </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        {kpis.map(kpi => (
-          <div key={kpi.label} className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className={`w-9 h-9 rounded-lg ${kpi.bg} flex items-center justify-center mb-3`}>
-              <kpi.icon size={18} className={kpi.color} />
-            </div>
-            <p className="text-xl font-bold text-charcoal">{kpi.value}</p>
-            <p className="text-xs text-muted mt-1">{kpi.label}</p>
-            {kpi.suffix && <p className="text-xs text-muted">{kpi.suffix}</p>}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {metrics.map(metric => (
+          <div key={metric.label} className="rounded-xl border border-gray-200 bg-white p-4">
+            <metric.icon size={20} className="text-redline" />
+            <p className="mt-3 text-2xl font-bold text-charcoal">{metric.value}</p>
+            <p className="text-sm text-muted">{metric.label}</p>
           </div>
         ))}
       </div>
-
-      {/* Report Links */}
-      <div>
-        <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-4">Available Reports</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {reportLinks.map(report => (
-            <a
-              key={report.href}
-              href={report.href}
-              className="bg-white rounded-xl border border-gray-200 p-4 hover:border-gray-300 hover:shadow-sm transition-all group"
-            >
-              <p className="font-medium text-charcoal group-hover:text-redline transition-colors">{report.label}</p>
-              <p className="text-sm text-muted mt-1">{report.description}</p>
-            </a>
-          ))}
-        </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Link href="/service-runs" className="rounded-xl border border-gray-200 bg-white p-4 font-medium text-charcoal hover:border-redline">Review service visits</Link>
+        <Link href="/crews" className="rounded-xl border border-gray-200 bg-white p-4 font-medium text-charcoal hover:border-redline">Review crew assignments</Link>
       </div>
-
-      <p className="text-xs text-muted">
-        Detailed reports require a connected Supabase database with populated data.
-        Export functionality is available for owners and bookkeepers.
-      </p>
     </div>
   );
 }

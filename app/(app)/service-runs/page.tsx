@@ -29,14 +29,14 @@ interface ServiceRunSummary {
 const STATUS_TABS: { value: RunStatus; label: string }[] = [
   { value: "submitted", label: "Needs Review" },
   { value: "needs_review", label: "In Review" },
-  { value: "completed", label: "Approved" },
+  { value: "completed", label: "Completed" },
   { value: "rejected", label: "Rejected" },
 ];
 
 const STATUS_BADGE: Record<RunStatus, { label: string; cls: string }> = {
   submitted: { label: "Submitted", cls: "bg-amber-100 text-amber-700" },
   needs_review: { label: "In Review", cls: "bg-blue-100 text-blue-700" },
-  completed: { label: "Approved", cls: "bg-green-100 text-green-700" },
+  completed: { label: "Completed", cls: "bg-green-100 text-green-700" },
   rejected: { label: "Rejected", cls: "bg-red-100 text-red-700" },
 };
 
@@ -57,30 +57,38 @@ export default function ServiceRunsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async (status: RunStatus) => {
+  const load = useCallback(async (status: RunStatus, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/service-runs?status=${status}&limit=50`);
+      const res = await fetch(`/api/v1/service-runs?status=${status}&limit=50`, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
+      if (signal?.aborted) return;
       setRuns(json.service_runs ?? []);
       setTotal(json.total ?? 0);
     } catch {
+      if (signal?.aborted) return;
+      setRuns([]);
+      setTotal(0);
       setError("Failed to load service runs.");
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   }, []);
 
-  useEffect(() => { load(tab); }, [tab, load]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => { void load(tab, controller.signal); }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [tab, load]);
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-charcoal">Service Runs</h1>
-          <p className="text-sm text-muted mt-0.5">Review and approve submitted field work</p>
+          <p className="text-sm text-muted mt-0.5">Review completed visits and evidence exceptions</p>
         </div>
         <button
           onClick={() => load(tab)}

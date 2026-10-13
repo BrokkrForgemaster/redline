@@ -1,123 +1,74 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+
+const crewId = z.uuid();
+const createInput = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).optional(),
+  leader_id: crewId.nullish(),
+}).strict();
+const updateInput = createInput.partial();
+
+async function applyCrewChange(action: string, id: string | null, payload: Record<string, unknown>) {
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+
+  // The database function checks owner, assurance, staff eligibility, and
+  // commits the crew, membership and audit changes in one transaction.
+  const { data, error } = await access.supabase.rpc("apply_crew_change" as never, {
+    p_action: action,
+    p_crew_id: id,
+    p_payload: payload,
+  } as never);
+  if (error || !data) {
+    if (error?.code === "23505") return { error: "This employee is already in the crew" };
+    if (error?.code === "P0002") return { error: "Crew or member was not found" };
+    if (error?.code === "23514") return { error: "Crew leader and membership are inconsistent" };
+    return { error: "Crew change was not saved. Check the staff role and retry." };
+  }
+  revalidatePath("/crews");
+  revalidatePath(`/crews/${data}`);
+  return { id: data, success: true };
+}
 
 export async function createCrew(data: {
   name: string;
   description?: string;
   leader_id?: string;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  if (!data.name?.trim()) return { error: "Crew name is required" };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = supabase as any;
-
-  const { data: crew, error } = await sb
-    .from("crews")
-    .insert({
-      name: data.name.trim(),
-      description: data.description?.trim() || null,
-      leader_id: data.leader_id || null,
-    })
-    .select("id")
-    .single();
-
-  if (error) return { error: "Failed to create crew" };
-
-  // Add leader as a crew member automatically
-  if (data.leader_id) {
-    await sb.from("crew_members").insert({
-      crew_id: crew.id,
-      employee_id: data.leader_id,
-      role: "leader",
-    });
-  }
-
-  revalidatePath("/crews");
-  return { id: crew.id };
+  const parsed = createInput.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid crew" };
+  return applyCrewChange("create", null, parsed.data);
 }
 
 export async function updateCrew(
   id: string,
   data: { name?: string; description?: string; leader_id?: string | null }
 ) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("crews")
-    .update({
-      name: data.name?.trim(),
-      description: data.description?.trim() || null,
-      leader_id: data.leader_id ?? null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) return { error: "Failed to update crew" };
-
-  revalidatePath("/crews");
-  revalidatePath(`/crews/${id}`);
-  return { success: true };
+  if (!crewId.safeParse(id).success) return { error: "Invalid crew ID" };
+  const parsed = updateInput.safeParse(data);
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid crew" };
+  if (Object.keys(parsed.data).length === 0) return { error: "No crew changes supplied" };
+  return applyCrewChange("update", id, parsed.data);
 }
 
-export async function addCrewMember(crewId: string, employeeId: string, role: "leader" | "member") {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+export async function addCrewMember(crewIdValue: string, employeeId: string, role: "leader" | "member") {
+  if (!crewId.safeParse(crewIdValue).success || !crewId.safeParse(employeeId).success ||
+      (role !== "leader" && role !== "member")) return { error: "Invalid crew member" };
+  return applyCrewChange("add_member", crewIdValue, { employee_id: employeeId, role });
+}
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("crew_members")
-    .insert({ crew_id: crewId, employee_id: employeeId, role });
-
-  if (error) {
-    if (error.code === "23505") return { error: "This employee is already in the crew" };
-    return { error: "Failed to add member" };
+export async function removeCrewMember(crewIdValue: string, employeeId: string) {
+  if (!crewId.safeParse(crewIdValue).success || !crewId.safeParse(employeeId).success) {
+    return { error: "Invalid crew member" };
   }
-
-  revalidatePath(`/crews/${crewId}`);
-  return { success: true };
-}
-
-export async function removeCrewMember(crewId: string, employeeId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("crew_members")
-    .delete()
-    .eq("crew_id", crewId)
-    .eq("employee_id", employeeId);
-
-  if (error) return { error: "Failed to remove member" };
-
-  revalidatePath(`/crews/${crewId}`);
-  return { success: true };
+  return applyCrewChange("remove_member", crewIdValue, { employee_id: employeeId });
 }
 
 export async function deactivateCrew(id: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
-    .from("crews")
-    .update({ active: false, updated_at: new Date().toISOString() })
-    .eq("id", id);
-
-  if (error) return { error: "Failed to deactivate crew" };
-
-  revalidatePath("/crews");
-  return { success: true };
+  if (!crewId.safeParse(id).success) return { error: "Invalid crew ID" };
+  return applyCrewChange("deactivate", id, {});
 }

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
@@ -12,7 +12,9 @@ export default async function CrewDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return <p>Active Admin account with verified MFA required.</p>;
+  const supabase = access.supabase;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
 
@@ -34,7 +36,7 @@ export default async function CrewDetailPage({
     .from("profiles")
     .select("id, first_name, last_name, role")
     .eq("status", "active")
-    .neq("role", "customer")
+    .in("role", ["mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator"])
     .order("last_name");
 
   const memberIds = ((members ?? []) as { employee_id: string }[]).map(m => m.employee_id);

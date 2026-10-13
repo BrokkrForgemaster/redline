@@ -3,6 +3,7 @@
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -262,9 +263,9 @@ export default function JobForm({ customers, crews }: Props) {
           {isSubmitting && <Loader2 size={15} className="animate-spin" />}
           {isSubmitting ? "Creating…" : "Create Job"}
         </button>
-        <a href="/jobs" className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+        <Link href="/jobs" className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
           Cancel
-        </a>
+        </Link>
       </div>
     </form>
   );

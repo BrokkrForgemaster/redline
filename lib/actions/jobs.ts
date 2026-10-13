@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
 import { jobSchema, type JobInput } from "@/lib/validations/job";
 import { logAudit } from "./audit";
 import { revalidatePath } from "next/cache";
@@ -29,9 +30,9 @@ export async function createJob(input: JobInput) {
     return { error: parsed.error.issues[0]?.message ?? "Validation failed" };
   }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+  const { supabase, user } = access;
 
   const d = parsed.data;
   const jobNumber = await getJobNumber(supabase);
@@ -85,13 +86,13 @@ export async function updateJob(id: string, input: JobInput) {
     return { error: parsed.error.issues[0]?.message ?? "Validation failed" };
   }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+  const { supabase, user } = access;
 
   const d = parsed.data;
 
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("jobs")
     .update({
       customer_id: d.customerId,
@@ -113,10 +114,12 @@ export async function updateJob(id: string, input: JobInput) {
       recurrence_rule: d.recurrenceRule ?? null,
       updated_by: user.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: "Failed to update job." };
+  if (error || !saved) {
+    return { error: "Job was not saved. Check access and retry." };
   }
 
   await logAudit({
@@ -131,25 +134,15 @@ export async function updateJob(id: string, input: JobInput) {
 }
 
 export async function updateJobStatus(id: string, status: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return { error: "Invalid job" };
+  const allowed = ["approved", "ready_to_schedule", "scheduled", "weather_delayed", "cancelled", "archived"];
+  if (!allowed.includes(status)) return { error: "Use the visit workflow for field status changes." };
 
-  const { error } = await supabase
-    .from("jobs")
-    .update({ status: status as never, updated_by: user.id })
-    .eq("id", id);
-
-  if (error) {
-    return { error: "Failed to update job status." };
-  }
-
-  await logAudit({
-    action: "status_change",
-    entityType: "job",
-    entityId: id,
-    afterData: { status },
-  });
+  const { error } = await access.supabase.rpc("change_legacy_job_status" as never,
+    { p_job_id: id, p_status: status } as never);
+  if (error) return { error: "Job status was not changed. Check its current state and retry." };
 
   revalidatePath(`/jobs/${id}`);
   revalidatePath("/jobs");

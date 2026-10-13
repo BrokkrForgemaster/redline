@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createProduct } from "@/lib/actions/inventory";
 import { Loader2, DollarSign } from "lucide-react";
+import Link from "next/link";
 
 // Use string for number fields to avoid zodResolver/zod v4 coerce type mismatch
 interface FormValues {
@@ -387,12 +388,12 @@ export default function ProductForm({ suppliers }: Props) {
 
       {/* Submit */}
       <div className="flex items-center justify-end gap-3">
-        <a
+        <Link
           href="/inventory"
           className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-charcoal"
         >
           Cancel
-        </a>
+        </Link>
         <button
           type="submit"
           disabled={isSubmitting}

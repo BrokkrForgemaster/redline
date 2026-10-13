@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import { toast } from "sonner";
 import {
   ArrowLeft, CheckCircle2, XCircle, Clock, MapPin, User,
   Camera, Loader2, ImageOff, AlertTriangle, ChevronDown, ChevronUp,
@@ -89,7 +88,6 @@ function formatDateTime(iso: string | null) {
 
 export default function ServiceRunDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
 
   const [run, setRun] = useState<RunDetail | null>(null);
   const [assets, setAssets] = useState<MediaAsset[]>([]);
@@ -99,9 +97,6 @@ export default function ServiceRunDetailPage() {
   const [counts, setCounts] = useState({ before: 0, after: 0 });
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [acting, setActing] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
-  const [showRejectForm, setShowRejectForm] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [lightbox, setLightbox] = useState<string | null>(null);
 
@@ -125,43 +120,10 @@ export default function ServiceRunDetailPage() {
     }
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
-
-  const handleApprove = useCallback(async () => {
-    setActing(true);
-    try {
-      const res = await fetch(`/api/v1/service-runs/${id}/approve`, { method: "POST" });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? `HTTP ${res.status}`);
-      toast.success(json.report_url ? "Approved — report generated." : "Service run approved.");
-      router.push("/service-runs");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to approve.");
-      setActing(false);
-    }
-  }, [id, router]);
-
-  const handleReject = useCallback(async () => {
-    if (!rejectReason.trim()) {
-      toast.error("Enter a rejection reason.");
-      return;
-    }
-    setActing(true);
-    try {
-      const res = await fetch(`/api/v1/service-runs/${id}/reject`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: rejectReason }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message ?? `HTTP ${res.status}`);
-      toast.success("Service run rejected.");
-      router.push("/service-runs");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reject.");
-      setActing(false);
-    }
-  }, [id, rejectReason, router]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   if (loading) {
     return (
@@ -223,7 +185,7 @@ export default function ServiceRunDetailPage() {
           </div>
           {isApproved && (
             <span className="flex items-center gap-1.5 text-sm font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full flex-shrink-0">
-              <CheckCircle2 size={15} /> Approved
+              <CheckCircle2 size={15} /> Completed
             </span>
           )}
           {isRejected && (
@@ -350,55 +312,8 @@ export default function ServiceRunDetailPage() {
       {/* Review actions */}
       {isReviewable && (
         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
-          <p className="font-semibold text-charcoal">Review Decision</p>
-
-          {!showRejectForm ? (
-            <div className="flex gap-3">
-              <button
-                onClick={handleApprove}
-                disabled={acting}
-                className="flex-1 flex items-center justify-center gap-2 bg-lawn hover:bg-lawn/90 text-white font-bold rounded-xl py-3.5 transition-colors disabled:opacity-60"
-              >
-                {acting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={20} />}
-                Approve
-              </button>
-              <button
-                onClick={() => setShowRejectForm(true)}
-                disabled={acting}
-                className="flex-1 flex items-center justify-center gap-2 bg-white border border-gray-200 text-charcoal font-semibold rounded-xl py-3.5 hover:bg-gray-50 transition-colors disabled:opacity-60"
-              >
-                <XCircle size={20} className="text-red-400" />
-                Reject
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                placeholder="Describe what needs to be corrected or re-done…"
-                className="w-full text-sm border border-gray-200 rounded-xl p-3 resize-none focus:outline-none focus:ring-2 focus:ring-red-300"
-                rows={3}
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={handleReject}
-                  disabled={acting || !rejectReason.trim()}
-                  className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl py-3 transition-colors disabled:opacity-60"
-                >
-                  {acting ? <Loader2 size={18} className="animate-spin" /> : <XCircle size={18} />}
-                  Confirm Reject
-                </button>
-                <button
-                  onClick={() => { setShowRejectForm(false); setRejectReason(""); }}
-                  disabled={acting}
-                  className="px-5 text-sm font-medium text-muted hover:text-charcoal transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+          <p className="font-semibold text-charcoal">Exception review required</p>
+          <p className="text-sm text-muted">This visit cannot be completed through office approval. Resolve its evidence or location exception through an audited workflow before finalizing it.</p>
         </div>
       )}
 

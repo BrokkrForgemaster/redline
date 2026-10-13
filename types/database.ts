@@ -754,6 +754,10 @@ export type Database = {
 export type AppRole =
   | "owner"
   | "developer"
+  | "mowing_crew_lead"
+  | "mowing_crew_laborer"
+  | "snow_plow_operator"
+  | "subcontractor"
   | "administrator"
   | "operations_manager"
   | "office_manager"

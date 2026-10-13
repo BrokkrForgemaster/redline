@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, UserCog } from "lucide-react";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -31,7 +32,9 @@ export default async function EmployeesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { status } = await searchParams;
-  const supabase = await createClient();
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) redirect("/dashboard");
+  const supabase = access.supabase;
 
   let query = supabase
     .from("profiles")
@@ -39,13 +42,19 @@ export default async function EmployeesPage({
     .neq("role", "customer")
     .order("last_name");
 
-  if (status && status !== "all") {
+  if (status && ["active", "inactive", "invited", "suspended"].includes(status)) {
     query = query.eq("status", status as EmployeeStatus);
   }
 
-  const { data: employees } = await query;
+  const { data: employees, error } = await query;
+  if (error) throw new Error("Employee list is unavailable.");
+  const { data: invitations, error: invitationError } = await supabase.from("staff_invitations")
+    .select("id,email,first_name,last_name,assigned_role,status,created_at,provider_error")
+    .in("status", ["pending", "failed"])
+    .order("created_at", { ascending: false });
+  if (invitationError) throw new Error("Invitation list is unavailable. Apply the staff invitation migration.");
 
-  const tabs = ["all", "active", "inactive"];
+  const tabs = ["all", "active", "invited", "inactive"];
 
   return (
     <div className="space-y-6">
@@ -157,6 +166,16 @@ export default async function EmployeesPage({
           </div>
         )}
       </div>
+      {(invitations?.length ?? 0) > 0 && <section className="space-y-3">
+        <h2 className="text-lg font-semibold">Invitation follow-up</h2>
+        <div className="rounded border bg-white divide-y">
+          {invitations?.map(invitation => <div key={invitation.id} className="p-4 text-sm">
+            <p className="font-medium">{invitation.first_name} {invitation.last_name} · {invitation.email}</p>
+            <p className="text-muted">{String(invitation.assigned_role).replaceAll("_", " ")} · {invitation.status}</p>
+            {invitation.provider_error && <p className="text-red-700">Provider step needs review before retrying.</p>}
+          </div>)}
+        </div>
+      </section>}
     </div>
   );
 }

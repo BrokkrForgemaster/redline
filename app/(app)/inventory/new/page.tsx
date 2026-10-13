@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import ProductForm from "./ProductForm";
+import Link from "next/link";
 
 export const metadata = { title: "New Inventory Item" };
 
@@ -15,7 +16,7 @@ export default async function NewInventoryPage() {
     <div className="space-y-6 max-w-3xl">
       <div>
         <nav className="flex items-center gap-2 text-sm mb-4">
-          <a href="/inventory" className="text-sm text-muted hover:text-charcoal">Inventory</a>
+          <Link href="/inventory" className="text-sm text-muted hover:text-charcoal">Inventory</Link>
           <span className="text-muted">/</span>
           <span className="text-charcoal font-medium">New Item</span>
         </nav>

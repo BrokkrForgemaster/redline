@@ -17,11 +17,15 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "□" },
-  { label: "My Jobs", href: "/my-jobs", icon: "▣", roles: ["crew_member", "crew_leader", "subcontractor"] },
-  { label: "Jobs", href: "/jobs", icon: "▣", roles: ["developer", "owner"] },
-  { label: "Service Runs", href: "/service-runs", icon: "○", roles: ["developer", "owner"] },
-  { label: "Crews", href: "/crews", icon: "◇", roles: ["developer", "owner"] },
-  { label: "Settings", href: "/settings", icon: "⚙", roles: ["developer", "owner"] },
+  { label: "Search Work", href: "/search", icon: "⌕", roles: ["owner", "mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
+  { label: "My Jobs", href: "/my-jobs", icon: "▣", roles: ["mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
+  { label: "Jobs", href: "/jobs", icon: "▣", roles: ["owner"] },
+  { label: "Service Runs", href: "/service-runs", icon: "○", roles: ["owner"] },
+  { label: "Customers", href: "/customers", icon: "◇", roles: ["owner"] },
+  { label: "Properties", href: "/properties", icon: "◇", roles: ["owner"] },
+  { label: "Crews", href: "/crews", icon: "◇", roles: ["owner"] },
+  { label: "Support", href: "/support", icon: "?", roles: ["owner", "developer"] },
+  { label: "Settings", href: "/settings", icon: "⚙", roles: ["owner", "developer", "mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
 ];
 
 interface Props {

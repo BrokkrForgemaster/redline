@@ -1,6 +1,5 @@
 import { requireApiUser, mapRole } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/errors";
-import { getEffectiveRole } from "@/lib/auth/privileged-users";
 
 export async function GET() {
   const auth = await requireApiUser();
@@ -21,7 +20,7 @@ export async function GET() {
     return apiError(403, "FORBIDDEN", "Account is not active.");
   }
 
-  const effectiveRole = getEffectiveRole(auth.user.email, profile.role, profile.email);
+  const effectiveRole = profile.role as string;
 
   return apiOk({
     user: {

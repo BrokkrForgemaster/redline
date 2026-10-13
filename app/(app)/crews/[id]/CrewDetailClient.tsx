@@ -190,7 +190,7 @@ export default function CrewDetailClient({ crew, members, nonMembers }: Props) {
               className="flex-1 min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm text-charcoal focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors"
             >
               <option value="">Add an employee…</option>
-              {nonMembers.map(emp => (
+              {nonMembers.filter(emp => selectedRole !== "leader" || emp.role === "mowing_crew_lead").map(emp => (
                 <option key={emp.id} value={emp.id}>
                   {emp.first_name} {emp.last_name}
                 </option>
@@ -198,7 +198,14 @@ export default function CrewDetailClient({ crew, members, nonMembers }: Props) {
             </select>
             <select
               value={selectedRole}
-              onChange={e => setSelectedRole(e.target.value as "member" | "leader")}
+              onChange={e => {
+                const nextRole = e.target.value as "member" | "leader";
+                setSelectedRole(nextRole);
+                if (nextRole === "leader" &&
+                    nonMembers.find(emp => emp.id === selectedEmployeeId)?.role !== "mowing_crew_lead") {
+                  setSelectedEmployeeId("");
+                }
+              }}
               className="rounded-lg border border-border bg-white px-3 py-2 text-sm text-charcoal focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors"
             >
               <option value="member">Member</option>

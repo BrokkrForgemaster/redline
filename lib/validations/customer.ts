@@ -60,8 +60,11 @@ export const propertySchema = z.object({
   serviceRestrictions: z.string().max(2000).optional().nullable(),
   propertyNotes: z.string().max(5000).optional().nullable(),
   active: z.boolean().default(true),
-  latitude: z.number().optional().nullable(),
-  longitude: z.number().optional().nullable(),
+  latitude: z.number().min(-90).max(90).optional().nullable(),
+  longitude: z.number().min(-180).max(180).optional().nullable(),
+}).refine((value) => (value.latitude == null) === (value.longitude == null), {
+  message: "Latitude and longitude must be entered together",
+  path: ["latitude"],
 });
 
 export type CustomerInput = z.infer<typeof customerSchema>;

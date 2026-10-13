@@ -1,6 +1,5 @@
 "use client";
 
-import type { Metadata } from "next";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,6 +10,7 @@ import { Loader2, ArrowLeft } from "lucide-react";
 
 export default function ForgotPasswordPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const {
     register,
@@ -19,12 +19,18 @@ export default function ForgotPasswordPage() {
   } = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) });
 
   async function onSubmit(data: ForgotPasswordInput) {
-    const supabase = createClient();
-    // Always show success to avoid revealing whether an account exists
-    await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    setSubmitted(true);
+    setRequestError(null);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+      if (error) throw error;
+      // Supabase does not reveal whether an account exists.
+      setSubmitted(true);
+    } catch {
+      setRequestError("The reset request could not be sent. Please try again shortly.");
+    }
   }
 
   if (submitted) {
@@ -38,7 +44,7 @@ export default function ForgotPasswordPage() {
         <h1 className="text-2xl font-bold text-charcoal">Check your email</h1>
         <p className="mt-3 text-sm text-muted leading-relaxed">
           If an account with that email exists, we sent a password reset link.
-          The link expires in 1 hour.
+          Open the link promptly to continue on this website.
         </p>
         <p className="mt-2 text-xs text-muted">
           Didn&apos;t receive it? Check your spam folder.
@@ -65,6 +71,7 @@ export default function ForgotPasswordPage() {
         Enter your email and we&apos;ll send you a reset link.
       </p>
       <form onSubmit={handleSubmit(onSubmit)} className="mt-8 space-y-5" noValidate>
+        {requestError && <p role="alert" className="text-sm text-red-700">{requestError}</p>}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-charcoal mb-1">
             Email address

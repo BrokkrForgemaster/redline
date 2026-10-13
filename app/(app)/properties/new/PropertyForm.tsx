@@ -3,6 +3,7 @@
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { propertySchema, type PropertyInput } from "@/lib/validations/customer";
@@ -266,12 +267,12 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
           {isSubmitting && <Loader2 size={15} className="animate-spin" />}
           {isSubmitting ? "Saving…" : "Create Property"}
         </button>
-        <a
+        <Link
           href="/properties"
           className="px-6 py-2.5 text-sm font-medium text-charcoal hover:bg-gray-100 rounded-lg transition-colors"
         >
           Cancel
-        </a>
+        </Link>
       </div>
     </form>
   );

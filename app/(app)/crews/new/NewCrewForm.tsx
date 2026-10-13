@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { createCrew } from "@/lib/actions/crews";
+import Link from "next/link";
 
 interface Employee {
   id: string;
@@ -35,11 +36,11 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
         description,
         leader_id: leaderId || undefined,
       });
-      if (result.error) {
-        toast.error(result.error);
-      } else {
+      if ("id" in result && result.id) {
         toast.success("Crew created");
         router.push(`/crews/${result.id}`);
+      } else {
+        toast.error(result.error ?? "Crew was not created");
       }
     });
   }
@@ -95,12 +96,12 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
       </div>
 
       <div className="flex items-center justify-end gap-3">
-        <a
+        <Link
           href="/crews"
           className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-charcoal"
         >
           Cancel
-        </a>
+        </Link>
         <button
           type="submit"
           disabled={isPending}

@@ -171,7 +171,9 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/images/logo.png" />
         <script
             dangerouslySetInnerHTML={{
-              __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});})}`,
+              __html: process.env.NODE_ENV === "development"
+                ? `if('serviceWorker' in navigator){window.addEventListener('load',async()=>{const registrations=await navigator.serviceWorker.getRegistrations();await Promise.all(registrations.map(registration=>registration.unregister()));if('caches' in window){const names=await caches.keys();await Promise.all(names.filter(name=>name.startsWith('redline-static-')).map(name=>caches.delete(name)));}if(navigator.serviceWorker.controller&&!sessionStorage.getItem('redline-dev-sw-reloaded')){sessionStorage.setItem('redline-dev-sw-reloaded','1');location.reload();}})}`
+                : `if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js').catch(()=>{});})}`,
             }}
         />
         <script

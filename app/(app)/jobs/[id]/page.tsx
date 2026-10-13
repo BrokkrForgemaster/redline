@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { canWorkLegacyJob } from "@/lib/api/legacy-job-access";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { formatDate, formatDateTime } from "@/lib/utils/format";
@@ -20,17 +21,11 @@ const PRIORITY_COLORS: Record<string, "gray" | "blue" | "yellow" | "red"> = {
 
 const JOB_STATUS_TRANSITIONS: Record<string, string[]> = {
   pending_approval: ["approved", "cancelled"],
-  approved: ["awaiting_deposit", "awaiting_materials", "ready_to_schedule", "cancelled"],
+  approved: ["ready_to_schedule", "cancelled"],
   awaiting_deposit: ["ready_to_schedule", "cancelled"],
   awaiting_materials: ["ready_to_schedule", "cancelled"],
   ready_to_schedule: ["scheduled", "cancelled"],
-  scheduled: ["en_route", "weather_delayed", "cancelled"],
-  en_route: ["arrived"],
-  arrived: ["in_progress"],
-  in_progress: ["paused", "quality_review", "completed"],
-  paused: ["in_progress", "cancelled"],
-  quality_review: ["completed", "follow_up_required", "in_progress"],
-  follow_up_required: ["in_progress", "completed"],
+  scheduled: ["weather_delayed", "cancelled"],
   weather_delayed: ["scheduled", "cancelled"],
   completed: ["archived"],
   cancelled: [],
@@ -39,7 +34,8 @@ const JOB_STATUS_TRANSITIONS: Record<string, string[]> = {
 
 type JobPhotoRow = {
   id: string;
-  url: string;
+  storage_path: string;
+  url: string | null;
   photo_type: "before" | "after";
   created_at: string;
   profiles: { first_name: string; last_name: string } | null;
@@ -48,6 +44,8 @@ type JobPhotoRow = {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  const { data: viewer } = await supabase.auth.getUser();
+  if (!viewer.user || !(await canWorkLegacyJob(viewer.user.id, id))) notFound();
   const { data } = await supabase.from("jobs").select("title, job_number").eq("id", id).single();
   return { title: data ? `${data.job_number} — ${data.title}` : "Job" };
 }
@@ -55,6 +53,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 export default async function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  const { data: viewer } = await supabase.auth.getUser();
+  if (!viewer.user || !(await canWorkLegacyJob(viewer.user.id, id))) notFound();
 
   const { data: job } = await supabase
     .from("jobs")
@@ -81,7 +81,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
       .order("clock_in", { ascending: false }),
     supabase
       .from("job_photos")
-      .select("id, url, photo_type, created_at, profiles!employee_id(first_name, last_name)")
+      .select("id, storage_path, photo_type, created_at, profiles!employee_id(first_name, last_name)")
       .eq("job_id", id)
       .order("created_at", { ascending: true }),
     supabase
@@ -109,7 +109,16 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   const badge = jobStatusBadge(job.status);
   const nextStatuses = JOB_STATUS_TRANSITIONS[job.status] ?? [];
-  const jobPhotos = (photos ?? []) as unknown as JobPhotoRow[];
+  const { data: viewerProfile } = viewer.user
+    ? await supabase.from("profiles").select("role, status").eq("id", viewer.user.id).single()
+    : { data: null };
+  const mayManage = viewerProfile?.role === "owner" && viewerProfile.status === "active";
+  const storage = createAdminClient().storage.from("job-photos");
+  const jobPhotos = await Promise.all(((photos ?? []) as unknown as Omit<JobPhotoRow, "url">[])
+    .map(async (photo) => {
+      const { data } = await storage.createSignedUrl(photo.storage_path, 900);
+      return { ...photo, url: data?.signedUrl ?? null };
+    }));
   const beforePhotos = jobPhotos.filter((photo) => photo.photo_type === "before");
   const afterPhotos = jobPhotos.filter((photo) => photo.photo_type === "after");
 
@@ -144,13 +153,13 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
           </div>
         </div>
         <div className="flex gap-2 flex-shrink-0">
-          <Link
+          {mayManage && <Link
             href={`/jobs/${id}/edit`}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
           >
             <Edit size={15} />
             Edit
-          </Link>
+          </Link>}
         </div>
       </div>
 
@@ -323,7 +332,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
               <StatusBadge label={badge.label} variant={badge.variant} />
             </div>
 
-            {nextStatuses.length > 0 && (
+            {mayManage && nextStatuses.length > 0 && (
               <div>
                 <p className="text-xs text-muted uppercase font-semibold tracking-wide mb-2">Update Status</p>
                 <div className="flex flex-col gap-2">
@@ -407,6 +416,7 @@ function JobPhotoSection({ title, photos }: { title: string; photos: JobPhotoRow
               ? `${photo.profiles.first_name} ${photo.profiles.last_name}`
               : "Unknown";
             return (
+              photo.url ? (
               <a
                 key={photo.id}
                 href={photo.url}
@@ -426,6 +436,11 @@ function JobPhotoSection({ title, photos }: { title: string; photos: JobPhotoRow
                   <p className="truncate text-[10px] text-muted">{formatDateTime(photo.created_at)}</p>
                 </div>
               </a>
+              ) : (
+                <div key={photo.id} className="flex aspect-square items-center justify-center rounded-xl bg-gray-50 p-3 text-center text-xs text-muted">
+                  Photo temporarily unavailable
+                </div>
+              )
             );
           })}
         </div>

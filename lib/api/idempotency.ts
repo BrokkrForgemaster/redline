@@ -30,7 +30,7 @@ export async function beginIdempotentRequest(
   const requestHash = hashRequestBody(requestBody);
   const { data: existing, error: existingError } = await sb
     .from("idempotency_keys")
-    .select("id, request_hash, response_status, response_body, completed_at")
+    .select("id, request_hash, response_status, response_body, completed_at, locked_until")
     .eq("user_id", userId)
     .eq("scope", scope)
     .eq("key", key)
@@ -60,7 +60,10 @@ export async function beginIdempotentRequest(
   }
 
   if (existing) {
-    return { ok: true as const, id: existing.id, key, requestHash };
+    if (existing.request_hash !== requestHash) {
+      return { ok: false as const, response: apiError(409, "CONFLICT_FINALIZED_RECORD", "Idempotency key was reused with a different request body.") };
+    }
+    return { ok: false as const, response: apiError(409, "CONFLICT_FINALIZED_RECORD", "An earlier request is still processing; retry after reconciliation.") };
   }
 
   const { data: inserted, error: insertError } = await sb
@@ -92,7 +95,7 @@ export async function completeIdempotentRequest(
   responseBody: unknown
 ) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { data, error } = await (supabase as any)
     .from("idempotency_keys")
     .update({
       response_status: responseStatus,
@@ -100,5 +103,8 @@ export async function completeIdempotentRequest(
       completed_at: new Date().toISOString(),
       locked_until: null,
     })
-    .eq("id", idempotencyId);
+    .eq("id", idempotencyId)
+    .select("id")
+    .single();
+  if (error || !data) throw new Error("Idempotency result was not recorded.");
 }

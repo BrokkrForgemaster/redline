@@ -1,27 +1,35 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { safeAuthNext } from "@/lib/auth/mfa-flow";
 import { Loader2, Shield } from "lucide-react";
 import Link from "next/link";
 
-export default function MFAChallengePage() {
+function MFAChallenge() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = safeAuthNext(searchParams.get("next"));
   const [code, setCode] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [factorId, setFactorId] = useState<string | null>(null);
+  const [factors, setFactors] = useState<{ id: string; friendly_name?: string | null }[]>([]);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.mfa.listFactors().then(({ data }) => {
-      const verified = data?.totp?.find(f => f.status === "verified");
-      if (verified) setFactorId(verified.id);
-      else router.push("/dashboard");
+    supabase.auth.mfa.listFactors().then(({ data, error: listError }) => {
+      if (listError) { setError("Could not load your authenticator. Try again."); return; }
+      const verified = data?.totp?.filter(f => f.status === "verified") ?? [];
+      if (verified.length) {
+        setFactors(verified);
+        setFactorId(verified[0].id);
+      }
+      else router.push(`/auth/mfa/enroll?next=${encodeURIComponent(next)}`);
     });
-  }, [router]);
+  }, [router, next]);
 
   function handleInput(index: number, value: string) {
     if (!/^\d*$/.test(value)) return;
@@ -76,7 +84,13 @@ export default function MFAChallengePage() {
       return;
     }
 
-    router.push("/dashboard");
+    const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assuranceError || assurance?.currentLevel !== "aal2") {
+      setError("Verification could not be confirmed. Please try again.");
+      setLoading(false);
+      return;
+    }
+    router.push(next);
     router.refresh();
   }
 
@@ -91,6 +105,14 @@ export default function MFAChallengePage() {
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8">
+        {factors.length > 1 && <label className="mb-4 block text-left text-sm">Authenticator
+          <select value={factorId ?? ""} onChange={event => setFactorId(event.target.value)}
+            className="mt-1 block w-full rounded border p-2">
+            {factors.map((factor, index) => <option key={factor.id} value={factor.id}>
+              {factor.friendly_name || `Authenticator ${index + 1}`}
+            </option>)}
+          </select>
+        </label>}
         <div className="flex gap-3 justify-center" onPaste={handlePaste}>
           {code.map((digit, index) => (
             <input
@@ -125,9 +147,15 @@ export default function MFAChallengePage() {
       <div className="mt-6 text-sm text-muted">
         Lost access to your authenticator?{" "}
         <Link href="/auth/mfa/recovery" className="text-redline hover:underline">
-          Use a recovery code
+          Request verified account recovery
         </Link>
       </div>
     </div>
   );
+}
+
+export default function MFAChallengePage() {
+  return <Suspense fallback={<p className="text-sm text-muted">Loading verification…</p>}>
+    <MFAChallenge />
+  </Suspense>;
 }

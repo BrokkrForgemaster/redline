@@ -1,6 +1,7 @@
 import { requireApiUser } from "@/lib/api/auth";
 import { requireWorkOrderAccess } from "@/lib/api/service-access";
 import { apiError, apiOk } from "@/lib/api/errors";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
@@ -11,7 +12,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!access.ok) return access.response;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = auth.supabase as any;
+  const sb = createAdminClient() as any;
 
   // Find the template version for this work order
   const { data: wo } = await sb

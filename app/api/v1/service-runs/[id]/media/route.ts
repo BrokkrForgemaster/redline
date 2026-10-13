@@ -1,6 +1,7 @@
 import { requireApiUser } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/errors";
 import { requireServiceRunAccess } from "@/lib/api/service-access";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
@@ -11,12 +12,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!access.ok) return access.response;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = auth.supabase as any;
+  const sb = createAdminClient() as any;
   const { data: assets, error } = await sb
     .from("media_assets")
     .select("id, evidence_type, media_category, status, byte_size, created_at")
     .eq("service_run_id", id)
-    .in("status", ["uploaded", "attached", "finalized"])
+    .in("status", ["attached", "finalized"])
     .order("created_at", { ascending: true });
 
   if (error) {

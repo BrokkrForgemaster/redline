@@ -65,7 +65,7 @@ export default function GalleryImageManager({ projectId, initialImages }: Props)
 
   const handleDelete = async (img: GalleryImageRow) => {
     setDeletingIds(prev => new Set(prev).add(img.id));
-    const result = await deleteGalleryImage(img.id, img.storage_path);
+    const result = await deleteGalleryImage(img.id);
     if (result.error) {
       toast.error(result.error);
     } else {
