@@ -228,7 +228,7 @@ BEGIN
   END IF;
 
   IF p_action IN ('create', 'update', 'add_member') AND v_leader IS DISTINCT FROM
-    CASE WHEN p_action = 'create' THEN NULL::uuid ELSE v_crew.leader_id END THEN
+    (CASE WHEN p_action = 'create' THEN NULL::uuid ELSE v_crew.leader_id END) THEN
     SELECT status, role INTO v_status, v_profile_role FROM public.profiles
       WHERE id = v_leader;
     IF v_leader IS NOT NULL AND (NOT FOUND OR v_status <> 'active' OR v_profile_role <> 'mowing_crew_lead') THEN
