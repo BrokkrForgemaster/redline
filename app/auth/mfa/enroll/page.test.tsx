@@ -42,7 +42,10 @@ test("an incomplete factor is not silently replaced; explicit restart removes it
   fireEvent.click(restart);
   await screen.findByRole("button", { name: "Verify and enable" });
   expect(unenroll).toHaveBeenCalledWith({ factorId: "unfinished" });
-  expect(enroll).toHaveBeenCalledWith({ factorType: "totp" });
+  expect(enroll).toHaveBeenCalledWith({
+    factorType: "totp",
+    issuer: "https://www.redlinelandscapingky.com",
+  });
   expect(unenroll.mock.invocationCallOrder[0]).toBeLessThan(enroll.mock.invocationCallOrder[0]);
 });
 

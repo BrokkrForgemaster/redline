@@ -8,6 +8,10 @@ import { createClient } from "@/lib/supabase/client";
 import { safeAuthNext } from "@/lib/auth/mfa-flow";
 import { hasRecentTotp } from "@/lib/auth/recent-mfa";
 
+// Supabase otherwise labels the authenticator from the Auth project's Site URL.
+// Keep the staff portal identity stable across local builds and preview hosts.
+const MFA_ISSUER = "https://www.redlinelandscapingky.com";
+
 function EnrollMfa() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -81,7 +85,10 @@ function EnrollMfa() {
         return;
       }
     }
-    const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({ factorType: "totp" });
+    const { data: enrolled, error: enrollError } = await supabase.auth.mfa.enroll({
+      factorType: "totp",
+      issuer: MFA_ISSUER,
+    });
     if (enrollError || !enrolled?.totp) {
       setError(enrollError?.code === "mfa_totp_enroll_not_enabled"
         ? "Authenticator enrollment is disabled in the authentication provider. Contact the site owner."
