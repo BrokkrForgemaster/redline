@@ -1,4 +1,4 @@
-// Read-only postcheck for the production 021-023 migration group.
+// Read-only postcheck for the production account-security foundation and cutover.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -29,16 +29,24 @@ try {
       WHERE enumtypid='public.app_role'::regtype
         AND enumlabel IN ('mowing_crew_lead','mowing_crew_laborer','snow_plow_operator','subcontractor')
       ORDER BY enumlabel`);
+    const profiles = await client.query(`SELECT
+      count(*) FILTER (WHERE status='active' AND role='owner')::int AS owners,
+      count(*) FILTER (WHERE status='active' AND role='crew_member')::int AS legacy_members,
+      count(*) FILTER (WHERE status='active' AND role='mowing_crew_laborer')::int AS laborers
+      FROM public.profiles`);
     const applied = history.rows.map(row => row.version);
     const definition = trigger.rows[0].definition;
     const expectedRoles = ['mowing_crew_laborer','mowing_crew_lead','snow_plow_operator','subcontractor'];
-    if (applied.join(',') !== '021,022,023' || !definition.includes("'invited'") ||
+    if (applied.join(',') !== '021,022,023,024,039,041,042' || !definition.includes("'invited'") ||
         definition.includes('raw_user_meta_data') || !index.rows[0].present ||
-        roles.rows.map(row => row.enumlabel).join(',') !== expectedRoles.join(',')) {
+        roles.rows.map(row => row.enumlabel).join(',') !== expectedRoles.join(',') ||
+        profiles.rows[0].owners !== 1 || profiles.rows[0].legacy_members !== 0 ||
+        profiles.rows[0].laborers !== 1) {
       throw new Error('Production foundation invariant failed.');
     }
     console.log(JSON.stringify({ projectRef, applied, invitedSignup: true,
-      uniqueOpenVisitIndex: true, staffRoleValues: roles.rows.length }));
+      uniqueOpenVisitIndex: true, staffRoleValues: roles.rows.length,
+      activeOwners: profiles.rows[0].owners, activeLaborers: profiles.rows[0].laborers }));
   } finally {
     await client.query('ROLLBACK');
   }
