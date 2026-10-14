@@ -9,9 +9,9 @@ export async function clockInWorkday() {
   if (!access.ok) return { error: "An active staff account with verified MFA is required." };
   const { supabase, user } = access;
   const { data: open, error: lookupError } = await supabase.from("time_entries")
-    .select("id").eq("employee_id", user.id).is("clock_out", null).limit(1);
+    .select("id").eq("employee_id", user.id).is("job_id", null).is("clock_out", null).limit(1);
   if (lookupError) return { error: "Could not check your current clock status. Try again." };
-  if (open?.length) return { error: "You are already clocked in. Clock out of the current entry first." };
+  if (open?.length) return { error: "Your workday is already clocked in." };
   const { data, error } = await supabase.from("time_entries")
     .insert({ employee_id: user.id, clock_in: new Date().toISOString(), job_id: null, is_manual: false })
     .select("id").single();

@@ -37,8 +37,12 @@ export async function createJob(input: JobInput) {
   const d = parsed.data;
   if (d.crewId) {
     const { data: crew, error: crewError } = await supabase.from("crews")
-      .select("id").eq("id", d.crewId).eq("active", true).maybeSingle();
-    if (crewError || !crew) return { error: "Select an active crew before saving." };
+      .select("id,subcontractor_company_id,subcontractor_companies(status)")
+      .eq("id", d.crewId).eq("active", true).maybeSingle();
+    const company = crew?.subcontractor_companies as unknown as { status: string } | null;
+    if (crewError || !crew || (crew.subcontractor_company_id && company?.status !== "active")) {
+      return { error: "Select an active crew and company before saving." };
+    }
   }
   if (d.propertyId) {
     const { data: property, error: propertyError } = await supabase.from("properties")
@@ -103,8 +107,12 @@ export async function updateJob(id: string, input: JobInput) {
   const d = parsed.data;
   if (d.crewId) {
     const { data: crew, error: crewError } = await supabase.from("crews")
-      .select("id").eq("id", d.crewId).eq("active", true).maybeSingle();
-    if (crewError || !crew) return { error: "Select an active crew before saving." };
+      .select("id,subcontractor_company_id,subcontractor_companies(status)")
+      .eq("id", d.crewId).eq("active", true).maybeSingle();
+    const company = crew?.subcontractor_companies as unknown as { status: string } | null;
+    if (crewError || !crew || (crew.subcontractor_company_id && company?.status !== "active")) {
+      return { error: "Select an active crew and company before saving." };
+    }
   }
   if (d.propertyId) {
     const { data: property, error: propertyError } = await supabase.from("properties")

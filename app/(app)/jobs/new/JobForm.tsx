@@ -22,6 +22,8 @@ interface Customer {
 interface Crew {
   id: string;
   name: string;
+  companyName: string | null;
+  hasSupervisor: boolean;
 }
 
 interface Property {
@@ -92,7 +94,9 @@ export default function JobForm({ customers, crews, job }: Props) {
   });
 
   const customerId = watch("customerId");
+  const crewId = watch("crewId");
   const isRecurring = watch("isRecurring");
+  const selectedCrew = crews.find(crew => crew.id === crewId);
 
   useEffect(() => {
     if (previousCustomerId.current !== customerId) {
@@ -218,9 +222,14 @@ export default function JobForm({ customers, crews, job }: Props) {
           <select {...register("crewId")} className={fieldClass} disabled={crews.length === 0}>
             <option value="">{crews.length === 0 ? "No crews yet — create one first" : "Unassigned"}</option>
             {crews.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.id} value={c.id}>{c.name} — {c.companyName ?? "Redline"}</option>
             ))}
           </select>
+          {selectedCrew?.companyName && !selectedCrew.hasSupervisor && (
+            <p role="alert" className="mt-2 text-sm text-amber-800">
+              No active subcontractor supervisor belongs to {selectedCrew.companyName}. This job will not appear in a supervisor&apos;s assigned work until Admin adds one to that company.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">

@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { canViewOperationsDashboard } from "@/lib/auth/privileged-users";
 import { isOperationalRole } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/server";
+import { loadAssignmentScope } from "@/lib/api/assignment-scope";
 import DashboardLiveRefresh from "@/components/app/DashboardLiveRefresh";
 import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 import { parseOwnerDashboardTotals } from "@/lib/dashboard/totals";
@@ -76,22 +77,19 @@ async function getCurrentUser() {
   };
 }
 
-async function loadAssignedWork(userId: string) {
+async function loadAssignedWork(userId: string, role: string) {
   const sb = createAdminClient();
-  const [{ data: direct, error: directError }, { data: crews, error: crewError }, { data: companies, error: companyError }] = await Promise.all([
+  const [scope, { data: direct, error: directError }] = await Promise.all([
+    loadAssignmentScope(sb, userId, role),
     sb.from("job_assignments").select("job_id").eq("employee_id", userId),
-    sb.from("crew_members").select("crew_id, crews!inner(active)").eq("employee_id", userId).eq("crews.active", true),
-    sb.from("subcontractor_memberships").select("subcontractor_company_id, subcontractor_companies!inner(status)").eq("user_id", userId).eq("active", true).eq("subcontractor_companies.status", "active"),
   ]);
-  if (directError || crewError || companyError) throw new Error("Could not verify assigned work.");
+  if (directError) throw new Error("Could not verify assigned work.");
 
   const directIds = ((direct ?? []) as { job_id: string }[]).map((r) => r.job_id);
-  const crewIds = ((crews ?? []) as { crew_id: string }[]).map((r) => r.crew_id);
-  const companyIds = ((companies ?? []) as { subcontractor_company_id: string }[]).map(r => r.subcontractor_company_id);
   const assignmentFilters = [
     `employee_id.eq.${userId}`,
-    ...(crewIds.length ? [`crew_id.in.(${crewIds.join(",")})`] : []),
-    ...(companyIds.length ? [`subcontractor_company_id.in.(${companyIds.join(",")})`] : []),
+    ...(scope.visibleCrewIds.length ? [`crew_id.in.(${scope.visibleCrewIds.join(",")})`] : []),
+    ...(scope.companyIds.length ? [`subcontractor_company_id.in.(${scope.companyIds.join(",")})`] : []),
   ];
   const { data: assignments, error: assignmentError } = await sb.from("work_order_assignments")
     .select("work_order_id").eq("active", true).or(assignmentFilters.join(","));
@@ -106,7 +104,7 @@ async function loadAssignedWork(userId: string) {
   const canonicalLegacyIds = new Set(workOrders.map(row => row.legacy_job_id).filter(Boolean));
   const filters = [
     directIds.length ? `id.in.(${directIds.join(",")})` : null,
-    crewIds.length ? `crew_id.in.(${crewIds.join(",")})` : null,
+    scope.visibleCrewIds.length ? `crew_id.in.(${scope.visibleCrewIds.join(",")})` : null,
   ].filter(Boolean);
 
   if (filters.length === 0) return { jobs: [] as JobRow[], workOrders };
@@ -191,7 +189,7 @@ export default async function DashboardPage() {
   if (!isOperationalRole(effectiveRole)) redirect("/login");
   let assigned: Awaited<ReturnType<typeof loadAssignedWork>> | null = null;
   try {
-    assigned = await loadAssignedWork(user.id);
+    assigned = await loadAssignedWork(user.id, effectiveRole);
   } catch {
     // Keep an assignment failure visible without exposing partial work.
   }

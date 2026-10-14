@@ -1,20 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createAdminClient, from } = vi.hoisted(() => ({
-  createAdminClient: vi.fn(), from: vi.fn(),
+const { createAdminClient, from, loadAssignmentScope } = vi.hoisted(() => ({
+  createAdminClient: vi.fn(), from: vi.fn(), loadAssignmentScope: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createAdminClient }));
+vi.mock("./assignment-scope", () => ({ loadAssignmentScope }));
 
 import { requireWorkOrderAccess } from "./service-access";
 
 function mockScope(role: string, crewCompany: string | null, activeCompany: string | null) {
+  loadAssignmentScope.mockResolvedValue({
+    visibleCrewIds: role === "subcontractor" && crewCompany === activeCompany && activeCompany
+      ? ["crew-1"] : [],
+    companyIds: role === "subcontractor" && activeCompany ? [activeCompany] : [],
+  });
   from.mockImplementation((table: string) => {
     let assignmentType = "";
     const data = table === "profiles" ? { role, status: "active" }
       : table === "work_orders" ? { id: "work-1" }
-      : table === "subcontractor_memberships" ? activeCompany
-        ? [{ subcontractor_company_id: activeCompany }] : []
-      : table === "crew_members" ? [{ crew_id: "crew-1", crews: { subcontractor_company_id: crewCompany } }]
       : [];
     const query = {
       select: () => query,
@@ -35,7 +38,7 @@ function mockScope(role: string, crewCompany: string | null, activeCompany: stri
 describe("service-role crew company scope", () => {
   beforeEach(() => { vi.clearAllMocks(); createAdminClient.mockReturnValue({ from }); });
 
-  it("allows a current subcontractor company member on its crew assignment", async () => {
+  it("allows a current subcontractor supervisor on its company crew assignment", async () => {
     mockScope("subcontractor", "company-a", "company-a");
     expect((await requireWorkOrderAccess({} as never, "worker-1", "work-1")).ok).toBe(true);
   });

@@ -2,13 +2,7 @@ import { requireApiUser } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/server";
 import { isOperationalRole } from "@/lib/auth/roles";
-
-async function getCrewIds(sb: ReturnType<typeof createAdminClient>, userId: string) {
-  const { data, error } = await sb.from("crew_members")
-    .select("crew_id, crews!inner(active)").eq("employee_id", userId).eq("crews.active", true);
-  if (error) throw new Error("Could not verify crew membership.");
-  return ((data ?? []) as { crew_id: string }[]).map((row) => row.crew_id);
-}
+import { loadAssignmentScope } from "@/lib/api/assignment-scope";
 
 export async function GET() {
   const auth = await requireApiUser();
@@ -23,19 +17,13 @@ export async function GET() {
   // scoped to auth.user.id, but uses service role so crew members can see their
   // own assignments without broad client-side table access.
   const sb = createAdminClient();
-  let crewIds: string[];
-  try { crewIds = await getCrewIds(sb, auth.user.id); }
+  let scope: Awaited<ReturnType<typeof loadAssignmentScope>>;
+  try { scope = await loadAssignmentScope(sb, auth.user.id, profile.role); }
   catch { return apiError(500, "INTERNAL_ERROR", "Could not load assignments."); }
-  const { data: companies, error: companyError } = await sb.from("subcontractor_memberships")
-    .select("subcontractor_company_id, subcontractor_companies!inner(status)")
-    .eq("user_id", auth.user.id).eq("active", true).eq("subcontractor_companies.status", "active");
-  if (companyError) return apiError(500, "INTERNAL_ERROR", "Could not verify company membership.");
-  const companyIds = ((companies ?? []) as { subcontractor_company_id: string }[])
-    .map(row => row.subcontractor_company_id);
   const assignmentFilters = [
     `employee_id.eq.${auth.user.id}`,
-    ...(crewIds.length ? [`crew_id.in.(${crewIds.join(",")})`] : []),
-    ...(companyIds.length ? [`subcontractor_company_id.in.(${companyIds.join(",")})`] : []),
+    ...(scope.visibleCrewIds.length ? [`crew_id.in.(${scope.visibleCrewIds.join(",")})`] : []),
+    ...(scope.companyIds.length ? [`subcontractor_company_id.in.(${scope.companyIds.join(",")})`] : []),
   ];
 
   const { data: workOrderAssignments, error: workOrderError } = await sb
@@ -79,6 +67,7 @@ export async function GET() {
     .from("job_assignments")
     .select("job_id")
     .eq("employee_id", auth.user.id);
+  if (directJobIdsResult.error) return apiError(500, "INTERNAL_ERROR", "Could not verify direct assignments.");
 
   const directJobIds = ((directJobIdsResult.data ?? []) as { job_id: string }[]).map(
     (row) => row.job_id
@@ -86,11 +75,11 @@ export async function GET() {
 
   const legacyOrFilters = [
     directJobIds.length ? `id.in.(${directJobIds.join(",")})` : null,
-    crewIds.length ? `crew_id.in.(${crewIds.join(",")})` : null,
+    scope.visibleCrewIds.length ? `crew_id.in.(${scope.visibleCrewIds.join(",")})` : null,
   ].filter(Boolean);
 
   if (legacyOrFilters.length > 0) {
-    const { data } = await sb
+    const { data, error } = await sb
       .from("jobs")
       .select(`
         id,
@@ -108,15 +97,17 @@ export async function GET() {
       .or(legacyOrFilters.join(","))
       .not("status", "in", "(cancelled,archived)")
       .order("scheduled_start", { ascending: true, nullsFirst: false });
-
+    if (error) return apiError(500, "INTERNAL_ERROR", "Could not load assigned jobs.");
     legacyJobs = data ?? [];
   }
 
-  return apiOk({
+  const response = apiOk({
     assignments: workOrderError ? [] : workOrderAssignments ?? [],
     legacy_jobs: legacyJobs,
     warnings: workOrderError
       ? ["New work-order tables are unavailable; returning legacy job assignments only."]
       : [],
   });
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }

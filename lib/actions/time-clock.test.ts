@@ -24,9 +24,21 @@ describe("personal clock boundary", () => {
 
   it("does not create a second open entry", async () => {
     const limit = vi.fn().mockResolvedValue({ data: [{ id: entryId }], error: null });
-    from.mockReturnValue({ select: () => ({ eq: () => ({ is: () => ({ limit }) }) }) });
+    const personalFilter = vi.fn(() => ({ is: () => ({ limit }) }));
+    from.mockReturnValue({ select: () => ({ eq: () => ({ is: personalFilter }) }) });
     expect(await clockInWorkday()).toHaveProperty("error");
+    expect(personalFilter).toHaveBeenCalledWith("job_id", null);
     expect(limit).toHaveBeenCalledWith(1);
+  });
+
+  it("starts a personal workday even when a separate job entry is open", async () => {
+    const limit = vi.fn().mockResolvedValue({ data: [], error: null });
+    const personalFilter = vi.fn(() => ({ is: () => ({ limit }) }));
+    const insert = vi.fn(() => ({ select: () => ({ single: async () => ({ data: { id: entryId }, error: null }) }) }));
+    from.mockReturnValue({ select: () => ({ eq: () => ({ is: personalFilter }) }), insert });
+    expect(await clockInWorkday()).toEqual({ id: entryId });
+    expect(personalFilter).toHaveBeenCalledWith("job_id", null);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ employee_id: userId, job_id: null }));
   });
 
   it("scopes clock out to the caller's open personal entry", async () => {
