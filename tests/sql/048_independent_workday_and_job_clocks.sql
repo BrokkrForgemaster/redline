@@ -51,11 +51,21 @@ DO $$ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 SELECT set_config('app.test_jwt', '{"aal":"aal1"}', true);
+SELECT set_config('app.test_user', '00000000-0000-4000-8000-000000000004', true);
 DO $$ BEGIN
   BEGIN
     INSERT INTO public.time_entries(employee_id, job_id) VALUES
       ('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000002');
     RAISE EXCEPTION 'First-factor-only job clock was accepted';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+SELECT set_config('app.test_jwt', '{"aal":"aal2"}', true);
+SELECT set_config('app.test_active', 'false', true);
+DO $$ BEGIN
+  BEGIN
+    INSERT INTO public.time_entries(employee_id, job_id) VALUES
+      ('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000002');
+    RAISE EXCEPTION 'Inactive worker job clock was accepted';
   EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 RESET ROLE;
