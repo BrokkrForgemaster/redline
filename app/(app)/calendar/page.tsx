@@ -24,7 +24,7 @@ type CalendarRecord = {
   scheduled_start: string;
   scheduled_end: string | null;
   timezone: string;
-  customers: { first_name: string; last_name: string } | null;
+  customers: { business_name: string | null } | null;
 };
 
 type LegacyCalendarRecord = {
@@ -34,7 +34,7 @@ type LegacyCalendarRecord = {
   scheduled_date: string;
   scheduled_start: string | null;
   scheduled_end: string | null;
-  customers: { first_name: string; last_name: string } | null;
+  customers: { business_name: string | null } | null;
   properties: { timezone: string | null } | null;
 };
 
@@ -63,7 +63,7 @@ function mapCalendarRecords(records: CalendarRecord[]): CalendarEvent[] {
     const timezone = record.timezone || "America/New_York";
     const start = toBusinessWallDate(record.scheduled_start, timezone);
     const scheduledEnd = record.scheduled_end ? toBusinessWallDate(record.scheduled_end, timezone) : null;
-    const customer = record.customers ? `${record.customers.first_name} ${record.customers.last_name}` : "Customer";
+    const customer = record.customers?.business_name || "Job site";
     return {
       id: record.id,
       title: `${record.title} — ${customer} (${timezone})`,
@@ -82,7 +82,7 @@ function mapLegacyRecords(records: LegacyCalendarRecord[]): CalendarEvent[] {
       ? toBusinessWallDate(record.scheduled_start, timezone)
       : new Date(year, month - 1, day, 8);
     const scheduledEnd = record.scheduled_end ? toBusinessWallDate(record.scheduled_end, timezone) : null;
-    const customer = record.customers ? `${record.customers.first_name} ${record.customers.last_name}` : "Customer";
+    const customer = record.customers?.business_name || "Job site";
     return {
       id: record.id,
       title: `${record.title} — ${customer} (legacy)`,

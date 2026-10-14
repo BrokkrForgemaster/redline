@@ -29,7 +29,7 @@ interface Job {
   scheduled_start: string | null;
   work_instructions: string | null;
   access_notes: string | null;
-  customers: { first_name: string; last_name: string; business_name: string | null } | null;
+  customers: { business_name: string | null } | null;
   properties: { address_line1: string; city: string; state: string } | null;
 }
 
@@ -199,9 +199,7 @@ export default function FieldJobView({
     return () => clearInterval(id);
   }, [activeEntry]);
 
-  const customerName =
-    job.customers?.business_name ??
-    (job.customers ? `${job.customers.first_name} ${job.customers.last_name}` : "");
+  const customerName = job.customers?.business_name ?? "Job site";
   const address = job.properties
     ? `${job.properties.address_line1}, ${job.properties.city}, ${job.properties.state}`
     : "";

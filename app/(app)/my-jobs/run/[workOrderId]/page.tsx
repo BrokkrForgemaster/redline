@@ -28,7 +28,7 @@ interface WorkOrderDetail {
   status: string;
   scheduled_start: string | null;
   instructions: string | null;
-  customers: { first_name: string; last_name: string; business_name: string | null } | null;
+  customers: { business_name: string | null } | null;
   properties: {
     address_line1: string; city: string; state: string; zip: string;
     geofence_radius_meters: number;
@@ -579,9 +579,7 @@ export default function ServiceRunPage() {
 
   const step = isSubmitted ? 3 : isFinished ? 2 : (isInProgress || isPaused) ? 1 : 0;
 
-  const customerName =
-    workOrder?.customers?.business_name ??
-    (workOrder?.customers ? `${workOrder.customers.first_name} ${workOrder.customers.last_name}` : "");
+  const customerName = workOrder?.customers?.business_name ?? "Job site";
   const address = workOrder?.properties
     ? `${workOrder.properties.address_line1}, ${workOrder.properties.city}, ${workOrder.properties.state}`
     : "";

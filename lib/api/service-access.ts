@@ -22,7 +22,7 @@ export async function requireWorkOrderAccess(
 
   const { data: workOrder, error } = await sb.from("work_orders")
     .select(`id, work_order_number, title, status, scheduled_start, scheduled_end,
-      timezone, instructions, property_id, customer_id,
+      timezone, instructions, property_id,
       customers(business_name),
       properties(id, address_line1, city, state, zip, latitude, longitude,
         geofence_radius_meters, timezone, access_instructions,

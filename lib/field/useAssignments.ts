@@ -20,9 +20,6 @@ export interface WorkOrderAssignment {
     timezone: string;
     instructions: string | null;
     customers: {
-      id: string;
-      first_name: string;
-      last_name: string;
       business_name: string | null;
     } | null;
     properties: {
@@ -53,7 +50,7 @@ export interface LegacyJob {
   scheduled_end: string | null;
   work_instructions: string | null;
   access_notes: string | null;
-  customers: { id: string; first_name: string; last_name: string; business_name: string | null } | null;
+  customers: { business_name: string | null } | null;
   properties: { id: string; property_name: string | null; address_line1: string; city: string; state: string; zip: string; latitude: number | null; longitude: number | null } | null;
 }
 
@@ -61,6 +58,26 @@ export interface AssignmentsResult {
   assignments: WorkOrderAssignment[];
   legacy_jobs: LegacyJob[];
   warnings: string[];
+}
+
+// Older per-user caches may contain customer contact fields. Strip them from
+// both network and offline data before a field screen can render or resave it.
+export function sanitizeAssignments(value: AssignmentsResult): AssignmentsResult {
+  return {
+    ...value,
+    assignments: (value.assignments ?? []).map(item => ({
+      ...item,
+      work_orders: item.work_orders ? {
+        ...item.work_orders,
+        customers: item.work_orders.customers
+          ? { business_name: item.work_orders.customers.business_name ?? null } : null,
+      } : null,
+    })),
+    legacy_jobs: (value.legacy_jobs ?? []).map(job => ({
+      ...job,
+      customers: job.customers ? { business_name: job.customers.business_name ?? null } : null,
+    })),
+  };
 }
 
 interface CachedAssignments {
@@ -109,7 +126,7 @@ export function useAssignments(): UseAssignmentsState {
         if (cached && !cancelled) {
           const age = Date.now() - new Date(cached.fetched_at).getTime();
           if (age < CACHE_TTL_MS) {
-            setData(cached.data);
+            setData(sanitizeAssignments(cached.data));
             setFromCache(true);
             setLoading(false);
           }
@@ -129,7 +146,7 @@ export function useAssignments(): UseAssignmentsState {
             : {},
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json: AssignmentsResult = await res.json();
+        const json: AssignmentsResult = sanitizeAssignments(await res.json());
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (!currentUser || currentUser.id !== user.id) return;
 
