@@ -32,7 +32,7 @@ BEGIN
         JOIN public.profiles p ON p.id = membership.user_id
           AND p.role = 'subcontractor' AND p.status = 'active'
         WHERE j.id = p_job_id
-    ) scoped WHERE scoped.id <> p_actor_id
+    ) scoped WHERE p_actor_id IS NULL OR scoped.id <> p_actor_id
   LOOP
     INSERT INTO public.notifications(user_id, type, title, body, action_url,
       entity_type, entity_id)
