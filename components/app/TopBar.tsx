@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -69,14 +69,15 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   const displayName = getProfileDisplayName(profile);
   const initials = getProfileInitials(profile);
 
-  function playAlertTone() {
+  const playAlertTone = useCallback(async () => {
     try {
       const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextCtor) return;
 
       const ctx = audioRef.current ?? new AudioContextCtor();
       audioRef.current = ctx;
-      if (ctx.state === "suspended") void ctx.resume();
+      if (ctx.state === "suspended") await ctx.resume();
+      if (ctx.state !== "running") return;
 
       const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -93,19 +94,19 @@ export default function TopBar({ profile, onMenuClick }: Props) {
     } catch {
       // Browser autoplay/audio policy can block this until the first user gesture.
     }
-  }
+  }, []);
 
-  function primeAlertAudio() {
+  const primeAlertAudio = useCallback(async () => {
     try {
       const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioContextCtor) return;
       const ctx = audioRef.current ?? new AudioContextCtor();
       audioRef.current = ctx;
-      if (ctx.state === "suspended") void ctx.resume();
+      if (ctx.state === "suspended") await ctx.resume();
     } catch {
       // Audio is optional; the persisted inbox remains the source of truth.
     }
-  }
+  }, []);
 
   function showSystemNotification(notification: NotificationItem) {
     if (typeof window === "undefined" || !("Notification" in window)) return;
@@ -147,12 +148,36 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   }, []);
 
   useEffect(() => {
+    // Browsers require a user gesture before Web Audio can play. Any normal
+    // interaction with the open portal can unlock subsequent alert tones.
+    const unlock = () => { void primeAlertAudio(); };
+    document.addEventListener("pointerdown", unlock, { once: true });
+    document.addEventListener("keydown", unlock, { once: true });
+    return () => {
+      document.removeEventListener("pointerdown", unlock);
+      document.removeEventListener("keydown", unlock);
+    };
+  }, [primeAlertAudio]);
+
+  useEffect(() => {
     const supabase = createClient();
-    let latestSeenCreatedAt: string | null = null;
+    let checkedSince: string | null = null;
     let requestSequence = 0;
+    let checkingNew = false;
     let active = true;
 
-    async function loadUnread(showToastForNew = false) {
+    function announce(next: NotificationItem) {
+      if (!next.id || next.read || seenAlertIds.current.has(next.id)) return false;
+      seenAlertIds.current.add(next.id);
+      setUnreadCount((count) => count + 1);
+      setNotifications((items) => [next, ...items.filter((item) => item.id !== next.id)].slice(0, 10));
+      void playAlertTone();
+      showSystemNotification(next);
+      toast.info(next.title || "New alert", { description: next.body });
+      return true;
+    }
+
+    async function loadUnread() {
       const sequence = ++requestSequence;
       const revision = alertRevision.current;
       const { data, count, error } = await (supabase as unknown as NotificationQueryClient)
@@ -172,26 +197,43 @@ export default function TopBar({ profile, onMenuClick }: Props) {
 
       setUnreadCount(count ?? 0);
       setNotifications((data ?? []) as NotificationItem[]);
-      for (const item of data ?? []) seenAlertIds.current.add(item.id);
+    }
 
-      const newest = data?.[0] as { title: string; body: string; created_at: string } | undefined;
-      if (!newest) return;
-
-      if (!latestSeenCreatedAt) {
-        latestSeenCreatedAt = newest.created_at;
-        return;
-      }
-
-      if (showToastForNew && newest.created_at > latestSeenCreatedAt) {
-        latestSeenCreatedAt = newest.created_at;
-        playAlertTone();
-        toast.info(newest.title, { description: newest.body });
-        router.refresh();
+    async function checkNewAlerts() {
+      if (!checkedSince || checkingNew || !active) return;
+      checkingNew = true;
+      const startingAt = checkedSince;
+      let newest = startingAt;
+      let offset = 0;
+      let announced = false;
+      try {
+        while (active) {
+          const { data, error } = await supabase.from("notifications")
+            .select("id, title, body, action_url, created_at, read")
+            .eq("user_id", profile.id)
+            .gte("created_at", startingAt)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(offset, offset + 99);
+          if (!active) return;
+          if (error) throw error;
+          for (const item of data ?? []) {
+            if (item.created_at > newest) newest = item.created_at;
+            if (announce(item as NotificationItem)) announced = true;
+          }
+          if (!data || data.length < 100) break;
+          offset += data.length;
+        }
+        checkedSince = newest;
+        if (announced) router.refresh();
+        await loadUnread();
+      } catch {
+        if (active) setAlertError("Alerts could not be refreshed. Retry when connected.");
+      } finally {
+        checkingNew = false;
       }
     }
 
-    loadUnread(false);
-    const interval = window.setInterval(() => loadUnread(true), 15000);
     const channel = supabase
       .channel(`notifications:${profile.id}`)
       .on(
@@ -199,26 +241,46 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` },
         (payload) => {
           const next = payload.new as NotificationItem;
-          if (!next.id || next.read || seenAlertIds.current.has(next.id)) return;
-          seenAlertIds.current.add(next.id);
+          if (!active || !announce(next)) return;
           requestSequence++;
-          if (next.created_at) latestSeenCreatedAt = next.created_at;
-          setUnreadCount((count) => count + 1);
-          setNotifications((items) => [next, ...items.filter((item) => item.id !== next.id)].slice(0, 10));
-          playAlertTone();
-          showSystemNotification(next);
-          toast.info(next.title ?? "New alert", { description: next.body });
           router.refresh();
         }
       )
       .subscribe();
+
+    async function initialize() {
+      // Baseline all alert states, not only unread ones. A previously read
+      // alert must not ring again when the page first opens.
+      const { data, error } = await supabase.from("notifications")
+        .select("id, created_at")
+        .eq("user_id", profile.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      if (!active) return;
+      if (error) {
+        setAlertError("Alerts could not be refreshed. Retry when connected.");
+        return;
+      }
+      if (data?.[0]) {
+        checkedSince = data[0].created_at;
+        seenAlertIds.current.add(data[0].id);
+      } else {
+        checkedSince = new Date().toISOString();
+      }
+      await loadUnread();
+      // Reconcile anything inserted while realtime was connecting.
+      await checkNewAlerts();
+    }
+
+    void initialize();
+    const interval = window.setInterval(() => void checkNewAlerts(), 15000);
 
     return () => {
       active = false;
       window.clearInterval(interval);
       supabase.removeChannel(channel);
     };
-  }, [profile.id, router]);
+  }, [profile.id, router, playAlertTone]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -328,7 +390,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
             type="button"
             onClick={() => {
               setNotificationsOpen((open) => !open);
-              primeAlertAudio();
+              void primeAlertAudio();
             }}
             className="relative p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors"
             aria-label="Notifications"
