@@ -414,6 +414,7 @@ export default function FieldJobView({
             <span>
               Planned{" "}
               {new Date(job.scheduled_start).toLocaleTimeString("en-US", {
+                timeZone: "America/New_York",
                 hour: "numeric",
                 minute: "2-digit",
               })}
