@@ -174,8 +174,8 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
         </div>
       </section>
 
-      {/* Measurements */}
-      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      {/* Measurements belong to the standalone property workflow, not customer setup. */}
+      {!defaultCustomerId && <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="text-base font-semibold text-charcoal">Measurements</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -186,7 +186,7 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
               id="lotSizeSqft"
               type="number"
               min={0}
-              {...register("lotSizeSqft", { valueAsNumber: true })}
+              {...register("lotSizeSqft", { setValueAs: value => value === "" ? null : Number(value) })}
               className={fieldClass}
               placeholder="e.g. 8500"
             />
@@ -199,13 +199,13 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
               id="turfAreaSqft"
               type="number"
               min={0}
-              {...register("turfAreaSqft", { valueAsNumber: true })}
+              {...register("turfAreaSqft", { setValueAs: value => value === "" ? null : Number(value) })}
               className={fieldClass}
               placeholder="e.g. 5000"
             />
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Access & Notes */}
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
