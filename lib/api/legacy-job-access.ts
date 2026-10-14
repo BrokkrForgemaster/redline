@@ -1,5 +1,6 @@
 import { isOperationalRole } from "@/lib/auth/roles";
 import { createAdminClient } from "@/lib/supabase/server";
+import { loadAssignmentScope } from "./assignment-scope";
 
 // Privileged legacy photo and clock paths must check current account and work scope.
 export async function canWorkLegacyJob(userId: string, jobId: string): Promise<boolean> {
@@ -18,11 +19,10 @@ export async function canWorkLegacyJob(userId: string, jobId: string): Promise<b
   if (directError) return false;
   if (direct?.length) return true;
   if (!job.crew_id) return false;
-
-  const { data: crew, error: crewError } = await admin.from("crews")
-    .select("active").eq("id", job.crew_id).single();
-  if (crewError || !crew?.active) return false;
-  const { data: member, error: memberError } = await admin.from("crew_members")
-    .select("id").eq("crew_id", job.crew_id).eq("employee_id", userId).limit(1);
-  return !memberError && !!member?.length;
+  try {
+    const scope = await loadAssignmentScope(admin, userId, profile.role);
+    return scope.visibleCrewIds.includes(job.crew_id);
+  } catch {
+    return false;
+  }
 }

@@ -57,14 +57,15 @@ export default async function TimeTrackingPage({
   const { data: openEntry, error: openError } = await supabase.from("time_entries")
     .select("id, job_id, clock_in")
     .eq("employee_id", access.user.id)
+    .is("job_id", null)
     .is("clock_out", null)
     .order("clock_in", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  const totalMinutes =
-    entries?.reduce((sum, e) => sum + (e.total_minutes ?? 0), 0) ?? 0;
-  const totalHours = (totalMinutes / 60).toFixed(1);
+  // Personal and job time can overlap; adding them together would double-count hours.
+  const workdayHours = ((entries?.reduce((sum, e) => sum + (e.job_id ? 0 : (e.total_minutes ?? 0)), 0) ?? 0) / 60).toFixed(1);
+  const jobHours = ((entries?.reduce((sum, e) => sum + (e.job_id ? (e.total_minutes ?? 0) : 0), 0) ?? 0) / 60).toFixed(1);
 
   const tabs = [
     { key: "all", label: "All" },
@@ -80,7 +81,7 @@ export default async function TimeTrackingPage({
         <div>
           <h1 className="text-2xl font-bold text-charcoal">Time Tracking</h1>
           <p className="text-sm text-muted">
-            {entries?.length ?? 0} recent entries · {totalHours} hours in this list
+            {entries?.length ?? 0} recent entries · {workdayHours} workday hours and {jobHours} job hours in this list
           </p>
         </div>
       </div>
@@ -94,8 +95,9 @@ export default async function TimeTrackingPage({
             <Clock size={20} className="text-redline" />
           </div>
           <div>
-            <p className="text-sm text-muted">Hours in recent entries</p>
-            <p className="text-2xl font-bold text-charcoal">{totalHours}h</p>
+            <p className="text-sm text-muted">Workday hours in recent entries</p>
+            <p className="text-2xl font-bold text-charcoal">{workdayHours}h</p>
+            <p className="text-xs text-muted">Job time: {jobHours}h, tracked separately</p>
           </div>
         </div>
       </div>

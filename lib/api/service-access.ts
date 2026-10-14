@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/server";
 import { apiError } from "./errors";
 import type { ApiSupabaseClient } from "./auth";
 import { isOperationalRole } from "@/lib/auth/roles";
+import { loadAssignmentScope } from "./assignment-scope";
 
 // Service-role reads require current identity and assignment checks here.
 export async function requireWorkOrderAccess(
@@ -39,33 +40,20 @@ export async function requireWorkOrderAccess(
   if (directError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify assignment.") };
   if (direct?.length) return { ok: true as const, workOrder };
 
-  const { data: companies, error: companyError } = await sb.from("subcontractor_memberships")
-    .select("subcontractor_company_id, subcontractor_companies!inner(status)")
-    .eq("user_id", userId).eq("active", true).eq("subcontractor_companies.status", "active");
-  if (companyError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify company membership.") };
-  const companyIds = ((companies ?? []) as { subcontractor_company_id: string }[])
-    .map(row => row.subcontractor_company_id);
-  const currentCompanies = new Set(companyIds);
-  const { data: memberships, error: crewError } = await sb.from("crew_members")
-    .select("crew_id, crews!inner(active,subcontractor_company_id)")
-    .eq("employee_id", userId).eq("crews.active", true);
-  if (crewError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify crew membership.") };
-  const crewIds = ((memberships ?? []) as {
-    crew_id: string; crews: { subcontractor_company_id: string | null };
-  }[]).filter(row => row.crews.subcontractor_company_id
-    ? profile.role === "subcontractor" && currentCompanies.has(row.crews.subcontractor_company_id)
-    : profile.role !== "subcontractor").map(row => row.crew_id);
-  if (crewIds.length) {
+  let scope: Awaited<ReturnType<typeof loadAssignmentScope>>;
+  try { scope = await loadAssignmentScope(sb, userId, profile.role); }
+  catch { return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify assignment scope.") }; }
+  if (scope.visibleCrewIds.length) {
     const { data: crew, error: assignmentError } = await sb.from("work_order_assignments")
       .select("id").eq("work_order_id", workOrderId).eq("active", true)
-      .eq("assignment_type", "crew").in("crew_id", crewIds).limit(1);
+      .eq("assignment_type", "crew").in("crew_id", scope.visibleCrewIds).limit(1);
     if (assignmentError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify crew assignment.") };
     if (crew?.length) return { ok: true as const, workOrder };
   }
-  if (companyIds.length) {
+  if (scope.companyIds.length) {
     const { data: company, error: assignmentError } = await sb.from("work_order_assignments")
       .select("id").eq("work_order_id", workOrderId).eq("active", true)
-      .eq("assignment_type", "subcontractor").in("subcontractor_company_id", companyIds).limit(1);
+      .eq("assignment_type", "subcontractor").in("subcontractor_company_id", scope.companyIds).limit(1);
     if (assignmentError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify company assignment.") };
     if (company?.length) return { ok: true as const, workOrder };
   }

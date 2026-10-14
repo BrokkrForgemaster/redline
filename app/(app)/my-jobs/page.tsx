@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { Briefcase, MapPin, Clock, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { useAssignments } from "@/lib/field/useAssignments";
@@ -21,6 +21,23 @@ const SERVICE_LABELS: Record<string, string> = {
   other: "General Service",
 };
 
+function subscribeToCalendar(notify: () => void) {
+  const timer = window.setInterval(notify, 60_000);
+  window.addEventListener("focus", notify);
+  return () => {
+    window.clearInterval(timer);
+    window.removeEventListener("focus", notify);
+  };
+}
+
+function currentLocalDay() {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric",
+  });
+}
+
+function serverDayPlaceholder() { return "Today"; }
+
 export default function MyJobsPage() {
   return <Suspense fallback={<p className="p-4 text-sm">Loading assigned work…</p>}><MyJobsContent /></Suspense>;
 }
@@ -31,12 +48,9 @@ function MyJobsContent() {
     ? viewParam : "assigned";
   const { data, loading, error, fromCache, refetch } = useAssignments();
   const outbox = useOutbox();
-
-  const dayLabel = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  // The server and a field worker's phone may use different time zones.
+  // Keep the first render identical, then show the phone's local day.
+  const dayLabel = useSyncExternalStore(subscribeToCalendar, currentLocalDay, serverDayPlaceholder);
 
   const matchesView = (status: string) => view === "assigned" ||
     (view === "complete" && status === "completed") ||

@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { requireStaffUser } from "@/lib/api/auth";
 import JobForm from "../../new/JobForm";
 import type { JobInput } from "@/lib/validations/job";
+import { loadJobCrewOptions } from "@/lib/jobs/crew-options";
 
 export const metadata: Metadata = { title: "Edit Job" };
 
@@ -23,11 +24,10 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
     access.supabase.from("customers")
       .select("id, first_name, last_name, business_name, account_type")
       .eq("status", "active").is("deleted_at", null).order("last_name"),
-    access.supabase.from("crews")
-      .select("id, name").eq("active", true).order("name"),
+    loadJobCrewOptions(access.supabase),
   ]);
   if (!job && jobError?.code === "PGRST116") notFound();
-  if (jobError || customersResult.error || crewsResult.error) {
+  if (jobError || customersResult.error) {
     throw new Error("Job editor could not be loaded. Please retry.");
   }
   if (!job) notFound();
@@ -65,6 +65,6 @@ export default async function EditJobPage({ params }: { params: Promise<{ id: st
       <h1 className="text-2xl font-bold text-charcoal">Edit {job.job_number}</h1>
       <p className="mt-1 text-sm text-muted">Update job details, schedule, and assigned crew.</p>
     </div>
-    <JobForm customers={customersResult.data ?? []} crews={crewsResult.data ?? []} job={initialJob} />
+    <JobForm customers={customersResult.data ?? []} crews={crewsResult} job={initialJob} />
   </div>;
 }

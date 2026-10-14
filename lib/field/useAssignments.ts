@@ -104,6 +104,36 @@ export function useAssignments(): UseAssignmentsState {
   const refetch = useCallback(() => setFetchTick((t) => t + 1), []);
 
   useEffect(() => {
+    const supabase = createClient();
+    let debounce: number | null = null;
+    const refresh = () => {
+      if (!navigator.onLine) return;
+      if (debounce) window.clearTimeout(debounce);
+      debounce = window.setTimeout(() => setFetchTick(tick => tick + 1), 250);
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    const channel = supabase.channel("assigned-work-refresh")
+      .on("postgres_changes", { event: "*", schema: "public", table: "jobs" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "work_orders" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "work_order_assignments" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "crew_members" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "subcontractor_memberships" }, refresh)
+      .subscribe();
+    const interval = window.setInterval(refresh, 15_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      if (debounce) window.clearTimeout(debounce);
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function load() {

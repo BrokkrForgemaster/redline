@@ -121,14 +121,17 @@ export async function clockIn(jobId: string, gps?: GpsPayload | null) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
 
-  // Guard: employee must not already be clocked in anywhere
-  const { data: existing } = await sb
+  // The personal workday clock is independent. Limit only overlapping job entries.
+  const { data: openJobs, error: lookupError } = await sb
     .from("time_entries")
     .select("id, job_id")
     .eq("employee_id", user.id)
+    .not("job_id", "is", null)
     .is("clock_out", null)
-    .maybeSingle();
+    .limit(1);
 
+  if (lookupError) return { error: "Could not check your current job clock. Try again." };
+  const existing = openJobs?.[0];
   if (existing) {
     if (existing.job_id === jobId) return { error: "You are already clocked in to this job." };
     return { error: "You are clocked in to another job. Please clock out first." };
