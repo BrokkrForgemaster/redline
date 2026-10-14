@@ -25,3 +25,26 @@ CREATE POLICY "Active assigned staff can clock in to a job"
     AND COALESCE(auth.jwt()->>'aal', '') = 'aal2'
     AND public.can_access_legacy_job(job_id)
   );
+
+-- The existing employee UPDATE policy permits closing an open entry. Do not
+-- let a browser turn a personal entry into a job entry (or switch job/actor).
+CREATE FUNCTION public.guard_time_entry_clock_identity()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp AS $$
+BEGIN
+  IF auth.uid() IS NOT NULL AND (
+    NEW.employee_id IS DISTINCT FROM OLD.employee_id OR
+    NEW.job_id IS DISTINCT FROM OLD.job_id OR
+    NEW.clock_in IS DISTINCT FROM OLD.clock_in OR
+    NEW.snow_event_id IS DISTINCT FROM OLD.snow_event_id OR
+    NEW.route_id IS DISTINCT FROM OLD.route_id
+  ) THEN
+    RAISE EXCEPTION 'Time entry identity cannot be changed by the signed-in worker';
+  END IF;
+  RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION public.guard_time_entry_clock_identity() FROM PUBLIC;
+
+CREATE TRIGGER time_entry_clock_identity_guard
+  BEFORE UPDATE ON public.time_entries
+  FOR EACH ROW EXECUTE FUNCTION public.guard_time_entry_clock_identity();
