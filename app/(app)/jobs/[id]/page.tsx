@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import JobStatusUpdater from "./JobStatusUpdater";
 import JobLocationMapWrapper from "@/components/app/JobLocationMapWrapper";
+import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 import type { LocationTag } from "@/components/app/JobLocationMap";
 
 const PRIORITY_COLORS: Record<string, "gray" | "blue" | "yellow" | "red"> = {
@@ -133,6 +134,7 @@ export default async function JobDetailPage({ params }: { params: Promise<{ id: 
 
   return (
     <div className="space-y-6">
+      <JobsLiveRefresh />
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

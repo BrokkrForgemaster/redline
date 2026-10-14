@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import FieldJobView from "./FieldJobView";
+import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 
 export default async function FieldJobPage({
   params,
@@ -20,7 +21,7 @@ export default async function FieldJobPage({
     .from("jobs")
     .select(`
       id, job_number, title, service_type, status,
-      scheduled_start, work_instructions, access_notes,
+      scheduled_start, actual_start, actual_end, work_instructions, access_notes,
       customers(business_name),
       properties(address_line1, city, state)
     `)
@@ -66,13 +67,16 @@ export default async function FieldJobPage({
   ]);
 
   return (
-    <FieldJobView
-      job={job}
-      activeEntry={activeEntry ?? null}
-      completedEntry={completedEntry ?? null}
-      beforeCount={beforeCount ?? 0}
-      afterCount={afterCount ?? 0}
-      locationTagged={!!manualLocationTagCount}
-    />
+    <>
+      <JobsLiveRefresh />
+      <FieldJobView
+        job={job}
+        activeEntry={activeEntry ?? null}
+        completedEntry={completedEntry ?? null}
+        beforeCount={beforeCount ?? 0}
+        afterCount={afterCount ?? 0}
+        locationTagged={!!manualLocationTagCount}
+      />
+    </>
   );
 }

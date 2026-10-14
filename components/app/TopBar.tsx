@@ -95,6 +95,18 @@ export default function TopBar({ profile, onMenuClick }: Props) {
     }
   }
 
+  function primeAlertAudio() {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = audioRef.current ?? new AudioContextCtor();
+      audioRef.current = ctx;
+      if (ctx.state === "suspended") void ctx.resume();
+    } catch {
+      // Audio is optional; the persisted inbox remains the source of truth.
+    }
+  }
+
   function showSystemNotification(notification: NotificationItem) {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
@@ -316,7 +328,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
             type="button"
             onClick={() => {
               setNotificationsOpen((open) => !open);
-              if (!audioRef.current) playAlertTone();
+              primeAlertAudio();
             }}
             className="relative p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors"
             aria-label="Notifications"

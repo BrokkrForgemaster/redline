@@ -27,6 +27,8 @@ interface Job {
   service_type: string;
   status: string;
   scheduled_start: string | null;
+  actual_start: string | null;
+  actual_end: string | null;
   work_instructions: string | null;
   access_notes: string | null;
   customers: { business_name: string | null } | null;
@@ -213,6 +215,7 @@ export default function FieldJobView({
   const isDone = !!completedEntry;
   const isActive = !isDone && !!activeEntry;
   const isReady = !isDone && !isActive;
+  const statusLabel = job.status.replaceAll("_", " ");
 
   function appendGps(fd: FormData, loc: GpsLocation | null) {
     if (!loc) return;
@@ -383,6 +386,16 @@ export default function FieldJobView({
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className={`rounded-full px-3 py-1 font-semibold capitalize ${job.status === "in_progress" || isActive
+            ? "bg-green-100 text-green-800"
+            : job.status === "completed" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-charcoal"}`}>
+            {isActive ? "In progress" : statusLabel}
+          </span>
+          {activeEntry && <span className="text-muted">You are clocked into this job</span>}
+          {!activeEntry && completedEntry && <span className="text-muted">Your job time is recorded</span>}
+        </div>
+
         {address && (
           <a
             href={mapsUrl ?? "#"}
@@ -399,13 +412,24 @@ export default function FieldJobView({
           <div className="flex items-center gap-2 text-sm text-muted">
             <Clock size={14} />
             <span>
-              Scheduled{" "}
+              Planned{" "}
               {new Date(job.scheduled_start).toLocaleTimeString("en-US", {
                 hour: "numeric",
                 minute: "2-digit",
               })}
             </span>
           </div>
+        )}
+
+        {job.actual_start && (
+          <p className="text-sm text-muted">Started {new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short",
+          }).format(new Date(job.actual_start))}</p>
+        )}
+        {job.actual_end && (
+          <p className="text-sm text-muted">Finished {new Intl.DateTimeFormat("en-US", {
+            timeZone: "America/New_York", dateStyle: "medium", timeStyle: "short",
+          }).format(new Date(job.actual_end))}</p>
         )}
 
         {job.access_notes && (

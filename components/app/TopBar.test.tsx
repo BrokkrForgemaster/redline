@@ -78,4 +78,23 @@ describe("header alert persistence", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("not marked read"));
     expect(screen.getByText("1 active")).toBeTruthy();
   });
+
+  it("does not sound a new-alert tone merely because the inbox was opened", async () => {
+    const oscillator = vi.fn();
+    const resume = vi.fn().mockResolvedValue(undefined);
+    const AudioContextMock = vi.fn(function () {
+      return { state: "suspended", resume, createOscillator: oscillator };
+    });
+    vi.stubGlobal("AudioContext", AudioContextMock);
+    try {
+      render(<TopBar profile={profile} onMenuClick={() => {}} />);
+      fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+      await screen.findByText("Crew assignment");
+      expect(AudioContextMock).toHaveBeenCalledOnce();
+      expect(resume).toHaveBeenCalledOnce();
+      expect(oscillator).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

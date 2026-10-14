@@ -56,6 +56,14 @@ type RunEventRow = {
   } | null;
 };
 
+type LegacyStartRow = {
+  id: string;
+  created_at: string;
+  job_id: string;
+  profiles: { first_name: string; last_name: string } | null;
+  jobs: { job_number: string; title: string } | null;
+};
+
 async function getCurrentUser() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -129,7 +137,7 @@ async function loadOperationsDashboard() {
   // Migration 031 adds the dashboard RPC; generated database types lag local SQL.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
-  const [jobsResult, workOrdersResult, eventResult, crewsResult, usersResult, totalsResult] = await Promise.all([
+  const [jobsResult, workOrdersResult, eventResult, legacyEventResult, crewsResult, usersResult, totalsResult] = await Promise.all([
     sb
       .from("jobs")
       .select("id, job_number, title, status, scheduled_start, customers(first_name, last_name, business_name), properties(address_line1, city, state)")
@@ -148,11 +156,16 @@ async function loadOperationsDashboard() {
       .in("event_type", ["start", "finish"])
       .order("created_at", { ascending: false })
       .limit(8),
+    sb.from("job_status_history")
+      .select("id, created_at, job_id, profiles!job_status_history_changed_by_fkey(first_name, last_name), jobs(job_number, title)")
+      .eq("to_status", "in_progress")
+      .order("created_at", { ascending: false })
+      .limit(8),
     sb.from("crews").select("id", { count: "exact", head: true }).eq("active", true),
     sb.from("profiles").select("id", { count: "exact", head: true }).eq("status", "active").neq("role", "customer"),
     sb.rpc("owner_dashboard_counts"),
   ]);
-  if (jobsResult.error || workOrdersResult.error || eventResult.error || crewsResult.error || usersResult.error) {
+  if (jobsResult.error || workOrdersResult.error || eventResult.error || legacyEventResult.error || crewsResult.error || usersResult.error) {
     throw new Error("Dashboard data is unavailable. Please retry after the database is updated.");
   }
 
@@ -162,7 +175,9 @@ async function loadOperationsDashboard() {
   return {
     jobs,
     workOrders,
-    events: (eventResult.data ?? []) as RunEventRow[],
+    events: ([...(eventResult.data ?? []) as RunEventRow[],
+      ...(legacyEventResult.data ?? []) as LegacyStartRow[]]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 8)),
     activeCrewCount: crewsResult.count ?? 0,
     activeUserCount: usersResult.count ?? 0,
     ...parseOwnerDashboardTotals(totalsResult.data?.[0], !!totalsResult.error),
@@ -319,9 +334,22 @@ function WorkOrderList({ workOrders }: { workOrders: WorkOrderRow[] }) {
   ));
 }
 
-function EventList({ events }: { events: RunEventRow[] }) {
+function EventList({ events }: { events: (RunEventRow | LegacyStartRow)[] }) {
   if (events.length === 0) return <Empty text="No start or end alerts yet." />;
   return events.map((event) => {
+    if ("job_id" in event) {
+      const worker = event.profiles ? `${event.profiles.first_name} ${event.profiles.last_name}` : "Assigned worker";
+      return <Link key={event.id} href={`/jobs/${event.job_id}`} className="block px-4 py-4 hover:bg-white/5 transition-colors">
+        <div className="flex items-start gap-3">
+          <Bell size={18} className="mt-1 text-redline" />
+          <div className="min-w-0">
+            <p className="font-semibold text-white">{worker} started a job</p>
+            <p className="mt-1 text-sm text-gray-400">{event.jobs?.job_number ?? "Job"} {event.jobs?.title ?? ""}</p>
+            <p className="mt-1 text-xs text-gray-500">{formatDateTime(event.created_at)}</p>
+          </div>
+        </div>
+      </Link>;
+    }
     const worker = event.profiles ? `${event.profiles.first_name} ${event.profiles.last_name}` : "Subcontractor";
     const workOrder = event.service_runs?.work_orders;
     return (
