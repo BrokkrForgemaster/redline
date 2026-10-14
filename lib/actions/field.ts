@@ -118,6 +118,16 @@ export async function clockIn(jobId: string, gps?: GpsPayload | null) {
   if (!(await canWorkLegacyJob(user.id, jobId))) return { error: "Active assignment required." };
   if (!(await hasMfaAssurance(supabase))) return { error: "Verified MFA is required." };
 
+  const admin = getAdminClient();
+  const [{ count: tags, error: tagError }, { count: photos, error: photoError }] = await Promise.all([
+    admin.from("job_location_tags").select("id", { count: "exact", head: true })
+      .eq("job_id", jobId).eq("employee_id", user.id).eq("tag_type", "manual"),
+    admin.from("job_photos").select("id", { count: "exact", head: true })
+      .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "before"),
+  ]);
+  if (tagError || photoError) return { error: "Could not verify this job's location and before photos." };
+  if (!tags || (photos ?? 0) < 3) return { error: "Tag this job's location and save three before photos before clocking in." };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
 
@@ -170,6 +180,11 @@ export async function clockOut(entryId: string, jobId: string, gps?: GpsPayload 
     .select("id, job_id").eq("id", entryId).eq("employee_id", user.id)
     .eq("job_id", jobId).is("clock_out", null).maybeSingle();
   if (entryError || !entry) return { error: "Clock entry does not belong to this job and worker." };
+  const { count: afterPhotos, error: photoError } = await admin.from("job_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "after");
+  if (photoError) return { error: "Could not verify this job's after photos." };
+  if ((afterPhotos ?? 0) < 3) return { error: "Save three after photos for this job before clocking out." };
   const { data: updatedEntry, error } = await admin
     .from("time_entries")
     .update({ clock_out: new Date().toISOString() })

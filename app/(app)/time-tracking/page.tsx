@@ -55,7 +55,7 @@ export default async function TimeTrackingPage({
 
   const { data: entries, error: entriesError } = await query;
   const { data: openEntry, error: openError } = await supabase.from("time_entries")
-    .select("id, job_id, clock_in")
+    .select("id, clock_in")
     .eq("employee_id", access.user.id)
     .is("job_id", null)
     .is("clock_out", null)
