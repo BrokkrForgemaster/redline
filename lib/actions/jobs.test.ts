@@ -47,6 +47,28 @@ describe("legacy job owner boundary", () => {
     expect(logAudit).not.toHaveBeenCalled();
   });
 
+  it("persists an active crew assignment and reports a rejected save", async () => {
+    const crewId = "e78a521b-c498-4321-87ac-2db662bcdb30";
+    const update = vi.fn();
+    const single = vi.fn().mockResolvedValueOnce({ data: { id }, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: "PGRST116" } });
+    update.mockReturnValue({ eq: () => ({ select: () => ({ single }) }) });
+    from.mockImplementation((table: string) => table === "crews"
+      ? { select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { id: crewId }, error: null }) }) }) }) }
+      : { update });
+
+    expect(await updateJob(id, { ...input, crewId })).toEqual({ id });
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ crew_id: crewId }));
+    expect(await updateJob(id, { ...input, crewId })).toHaveProperty("error");
+  });
+
+  it("rejects an inactive or missing crew before changing a job", async () => {
+    const crewId = "e78a521b-c498-4321-87ac-2db662bcdb30";
+    from.mockReturnValue({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }) }) });
+    expect(await updateJob(id, { ...input, crewId })).toHaveProperty("error");
+    expect(logAudit).not.toHaveBeenCalled();
+  });
+
   it("uses the guarded database status command", async () => {
     rpc.mockResolvedValue({ error: null });
     expect(await updateJobStatus(id, "scheduled")).toEqual({ success: true });

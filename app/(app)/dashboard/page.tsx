@@ -119,7 +119,7 @@ async function loadAssignedWork(userId: string) {
       properties(address_line1, city, state)
     `)
     .or(filters.join(","))
-    .in("status", OPEN_LEGACY_STATUSES)
+    .in("status", [...OPEN_LEGACY_STATUSES, "completed"])
     .order("scheduled_start", { ascending: true, nullsFirst: false });
 
   if (error) throw new Error("Could not load assigned legacy jobs.");
@@ -249,9 +249,13 @@ function OperationsDashboard({ data, role }: { data: Awaited<ReturnType<typeof l
 }
 
 function AssignedDashboard({ jobs, workOrders, role }: { jobs: JobRow[]; workOrders: WorkOrderRow[]; role: string }) {
-  const active = jobs.filter(j => j.status === "in_progress").length + workOrders.filter(wo => wo.status === "in_progress").length;
-  const complete = workOrders.filter(wo => wo.status === "completed").length;
-  const open = jobs.length + workOrders.filter(wo => OPEN_WORK_ORDER_STATUSES.includes(wo.status)).length;
+  const active = jobs.filter(j => ["in_progress", "paused"].includes(j.status)).length +
+    workOrders.filter(wo => ["in_progress", "paused"].includes(wo.status)).length;
+  const complete = jobs.filter(job => job.status === "completed").length +
+    workOrders.filter(wo => wo.status === "completed").length;
+  const open = jobs.filter(job => OPEN_LEGACY_STATUSES.includes(job.status)).length +
+    workOrders.filter(wo => OPEN_WORK_ORDER_STATUSES.includes(wo.status)).length;
+  const assignedCount = jobs.length + workOrders.length;
   const title = role === "subcontractor" ? "Subcontractor Dashboard" : role === "mowing_crew_lead" ? "Mowing Crew Lead Dashboard" : role === "mowing_crew_laborer" ? "Mowing Crew Laborer Dashboard" : "Snow Plow Operator Dashboard";
 
   return (
@@ -262,7 +266,8 @@ function AssignedDashboard({ jobs, workOrders, role }: { jobs: JobRow[]; workOrd
           <h1 className="text-2xl font-bold text-white">{title}</h1>
           <p className="mt-1 text-sm text-gray-400">Track assigned work, GPS starts, and required before/after photos.</p>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Metric label="Assigned Jobs" value={assignedCount} icon={Briefcase} href="/my-jobs?view=assigned" />
           <Metric label="Open" value={open} icon={Briefcase} href="/my-jobs?view=open" />
           <Metric label="Active" value={active} icon={PlayCircle} href="/my-jobs?view=active" />
           <Metric label="Complete" value={complete} icon={CheckCircle2} href="/my-jobs?view=complete" />

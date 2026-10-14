@@ -42,7 +42,7 @@ BEGIN
   p_email := lower(btrim(p_email));
   p_first_name := btrim(p_first_name);
   p_last_name := btrim(p_last_name);
-  IF p_user_id IS NULL OR p_email IS NULL OR p_email !~ '^[^@ ]+@[^@ ]+\.[^@ ]+$'
+  IF p_user_id IS NULL OR p_email IS NULL OR p_email !~ '^[^@ ]+@[^@ ]+[.][^@ ]+$'
      OR char_length(p_first_name) NOT BETWEEN 1 AND 50
      OR char_length(p_last_name) NOT BETWEEN 1 AND 50
      OR p_role NOT IN ('mowing_crew_lead', 'mowing_crew_laborer',
@@ -97,6 +97,7 @@ END $$;
 
 REVOKE ALL ON FUNCTION public.register_staff_account_setup(uuid, text, text, text, app_role) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.complete_staff_account_setup(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.complete_staff_account_setup(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.register_staff_account_setup(uuid, text, text, text, app_role) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.complete_staff_account_setup(uuid) TO service_role;
 

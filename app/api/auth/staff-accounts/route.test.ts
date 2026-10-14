@@ -24,8 +24,12 @@ function setup(level: "aal1" | "aal2" = "aal2") {
     }) } }, rpc: register,
   } });
   const createUser = vi.fn().mockResolvedValue({ data: { user: { id: "new-user" } }, error: null });
-  createAdminClient.mockReturnValue({ auth: { admin: { createUser } } });
-  return { register, createUser };
+  const schema = vi.fn().mockResolvedValue({ error: null });
+  createAdminClient.mockReturnValue({
+    from: vi.fn().mockReturnValue({ select: () => ({ limit: schema }) }),
+    auth: { admin: { createUser } },
+  });
+  return { register, createUser, schema };
 }
 
 describe("owner-provisioned staff account", () => {
@@ -56,6 +60,12 @@ describe("owner-provisioned staff account", () => {
       p_user_id: "new-user", p_role: "subcontractor", p_email: input.email,
     }));
     expect(createUser).toHaveBeenCalledBefore(register);
+  });
+  it("does not create an Auth user before migration 045 is present", async () => {
+    const { schema, createUser } = setup();
+    schema.mockResolvedValue({ error: { message: "missing table" } });
+    expect((await POST(request())).status).toBe(503);
+    expect(createUser).not.toHaveBeenCalled();
   });
   it("reports registration failure without claiming operational access", async () => {
     const { register } = setup();

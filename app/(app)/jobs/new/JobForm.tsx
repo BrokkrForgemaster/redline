@@ -5,10 +5,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { jobSchema, type JobInput } from "@/lib/validations/job";
-import { createJob } from "@/lib/actions/jobs";
+import { createJob, updateJob } from "@/lib/actions/jobs";
 import { Loader2 } from "lucide-react";
 
 interface Customer {
@@ -35,6 +35,21 @@ interface Property {
 interface Props {
   customers: Customer[];
   crews: Crew[];
+  job?: JobInput & { id: string };
+}
+
+function localDateTime(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function storedDateTime(value: string | null | undefined) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toISOString();
 }
 
 const fieldClass = "block w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-charcoal placeholder:text-muted focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors";
@@ -53,10 +68,11 @@ const SERVICE_TYPES = [
   { value: "other", label: "Other" },
 ];
 
-export default function JobForm({ customers, crews }: Props) {
+export default function JobForm({ customers, crews, job }: Props) {
   const router = useRouter();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loadingProperties, setLoadingProperties] = useState(false);
+  const previousCustomerId = useRef(job?.customerId);
 
   const {
     register,
@@ -69,6 +85,9 @@ export default function JobForm({ customers, crews }: Props) {
     defaultValues: {
       priority: "normal",
       isRecurring: false,
+      ...(job ?? {}),
+      scheduledStart: localDateTime(job?.scheduledStart),
+      scheduledEnd: localDateTime(job?.scheduledEnd),
     },
   });
 
@@ -76,6 +95,10 @@ export default function JobForm({ customers, crews }: Props) {
   const isRecurring = watch("isRecurring");
 
   useEffect(() => {
+    if (previousCustomerId.current !== customerId) {
+      setValue("propertyId", null);
+      previousCustomerId.current = customerId;
+    }
     if (!customerId) {
       setProperties([]);
       setValue("propertyId", null);
@@ -90,19 +113,25 @@ export default function JobForm({ customers, crews }: Props) {
       .is("deleted_at", null)
       .eq("active", true)
       .order("address_line1")
-      .then(({ data }) => {
+      .then(({ data, error }) => {
         setProperties((data as Property[]) ?? []);
         setLoadingProperties(false);
+        if (error) toast.error("Properties could not be loaded. Retry before saving.");
       });
   }, [customerId, setValue]);
 
   async function onSubmit(data: JobInput) {
-    const result = await createJob(data);
+    const payload = {
+      ...data,
+      scheduledStart: storedDateTime(data.scheduledStart),
+      scheduledEnd: storedDateTime(data.scheduledEnd),
+    };
+    const result = job ? await updateJob(job.id, payload) : await createJob(payload);
     if (result.error) {
       toast.error(result.error);
       return;
     }
-    toast.success("Job created");
+    toast.success(job ? "Job updated" : "Job created");
     router.push(`/jobs/${result.id}`);
   }
 
@@ -200,14 +229,20 @@ export default function JobForm({ customers, crews }: Props) {
             <input {...register("scheduledDate")} type="date" className={fieldClass} />
           </div>
           <div>
-            <label className={labelClass}>Start Time</label>
-            <input {...register("scheduledStart")} type="time" className={fieldClass} />
+            <label className={labelClass}>Start Date and Time</label>
+            <input {...register("scheduledStart")} type="datetime-local" className={fieldClass} />
           </div>
+        </div>
+
+        <div>
+          <label className={labelClass}>End Date and Time</label>
+          <input {...register("scheduledEnd")} type="datetime-local" className={fieldClass} />
         </div>
 
         <div>
           <label className={labelClass}>Estimated Hours</label>
           <input
+            defaultValue={job?.estimatedHours ?? ""}
             type="number"
             step="0.5"
             min="0.5"
@@ -261,9 +296,9 @@ export default function JobForm({ customers, crews }: Props) {
           className="flex items-center gap-2 bg-redline text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-redline-dark transition-colors disabled:opacity-60"
         >
           {isSubmitting && <Loader2 size={15} className="animate-spin" />}
-          {isSubmitting ? "Creating…" : "Create Job"}
+          {isSubmitting ? "Saving…" : job ? "Save Changes" : "Create Job"}
         </button>
-        <Link href="/jobs" className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+        <Link href={job ? `/jobs/${job.id}` : "/jobs"} className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
           Cancel
         </Link>
       </div>

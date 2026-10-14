@@ -18,6 +18,11 @@ export async function POST(request: NextRequest) {
   const { email: rawEmail, firstName, lastName, role, initialPassword } = input.data;
   const email = rawEmail.trim().toLowerCase();
   const admin = createAdminClient();
+  const { error: schemaError } = await admin.from("staff_account_setups")
+    .select("user_id", { count: "exact", head: true }).limit(0);
+  if (schemaError) return NextResponse.json({
+    error: "Staff account setup is unavailable until the database migration is applied.",
+  }, { status: 503 });
   // No role metadata is passed to Auth. The profile trigger creates an invited,
   // nonoperational profile; the owner-authorized RPC records the chosen role.
   const { data: created, error: createError } = await admin.auth.admin.createUser({

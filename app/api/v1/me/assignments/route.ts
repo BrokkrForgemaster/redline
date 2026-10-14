@@ -106,7 +106,7 @@ export async function GET() {
         properties(id, property_name, address_line1, city, state, zip, latitude, longitude, access_instructions)
       `)
       .or(legacyOrFilters.join(","))
-      .not("status", "in", "(cancelled,archived,completed)")
+      .not("status", "in", "(cancelled,archived)")
       .order("scheduled_start", { ascending: true, nullsFirst: false });
 
     legacyJobs = data ?? [];

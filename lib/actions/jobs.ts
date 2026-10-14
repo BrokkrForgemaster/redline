@@ -35,6 +35,16 @@ export async function createJob(input: JobInput) {
   const { supabase, user } = access;
 
   const d = parsed.data;
+  if (d.crewId) {
+    const { data: crew, error: crewError } = await supabase.from("crews")
+      .select("id").eq("id", d.crewId).eq("active", true).maybeSingle();
+    if (crewError || !crew) return { error: "Select an active crew before saving." };
+  }
+  if (d.propertyId) {
+    const { data: property, error: propertyError } = await supabase.from("properties")
+      .select("id").eq("id", d.propertyId).eq("customer_id", d.customerId).maybeSingle();
+    if (propertyError || !property) return { error: "The property must belong to the selected customer." };
+  }
   const jobNumber = await getJobNumber(supabase);
 
   const { data, error } = await supabase
@@ -91,6 +101,16 @@ export async function updateJob(id: string, input: JobInput) {
   const { supabase, user } = access;
 
   const d = parsed.data;
+  if (d.crewId) {
+    const { data: crew, error: crewError } = await supabase.from("crews")
+      .select("id").eq("id", d.crewId).eq("active", true).maybeSingle();
+    if (crewError || !crew) return { error: "Select an active crew before saving." };
+  }
+  if (d.propertyId) {
+    const { data: property, error: propertyError } = await supabase.from("properties")
+      .select("id").eq("id", d.propertyId).eq("customer_id", d.customerId).maybeSingle();
+    if (propertyError || !property) return { error: "The property must belong to the selected customer." };
+  }
 
   const { data: saved, error } = await supabase
     .from("jobs")

@@ -124,9 +124,13 @@ export function useAssignments(): UseAssignmentsState {
         const db = await openFieldDb();
         const cached = await idbGet<CachedAssignments>(db, "syncMetadata", cacheKey);
         if (cached && !cancelled) {
+          const safeData = sanitizeAssignments(cached.data);
+          // Replace older cached payloads that included customer contact fields
+          // before showing downloaded work to a staff user.
+          await idbPut(db, "syncMetadata", { ...cached, data: safeData });
           const age = Date.now() - new Date(cached.fetched_at).getTime();
           if (age < CACHE_TTL_MS) {
-            setData(sanitizeAssignments(cached.data));
+            setData(safeData);
             setFromCache(true);
             setLoading(false);
           }
