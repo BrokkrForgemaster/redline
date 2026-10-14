@@ -20,7 +20,7 @@ export default async function FieldJobPage({
   const { data: job } = await sb
     .from("jobs")
     .select(`
-      id, job_number, title, service_type, status,
+      id, job_number, title, service_type, status, is_recurring,
       scheduled_start, actual_start, actual_end, work_instructions, access_notes,
       customers(business_name),
       properties(address_line1, city, state)
@@ -61,7 +61,7 @@ export default async function FieldJobPage({
     sb.from("job_photos").select("id", { count: "exact", head: true })
       .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "before"),
     sb.from("job_photos").select("id", { count: "exact", head: true })
-      .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "after"),
+      .eq("job_id", jobId).eq("photo_type", "after"),
     sb.from("job_location_tags").select("id", { count: "exact", head: true })
       .eq("job_id", jobId).eq("employee_id", user.id).eq("tag_type", "manual"),
   ]);

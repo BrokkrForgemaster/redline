@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createClient, adminClient, canWorkLegacyJob, hasMfaAssurance, userFrom, adminFrom } = vi.hoisted(() => ({
+const { createClient, adminClient, canWorkLegacyJob, hasMfaAssurance, userFrom, adminFrom, rpc } = vi.hoisted(() => ({
   createClient: vi.fn(), adminClient: vi.fn(), canWorkLegacyJob: vi.fn(), hasMfaAssurance: vi.fn(),
-  userFrom: vi.fn(), adminFrom: vi.fn(),
+  userFrom: vi.fn(), adminFrom: vi.fn(), rpc: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient }));
 vi.mock("@supabase/supabase-js", () => ({ createClient: adminClient }));
@@ -29,7 +29,7 @@ function countQuery(count: number) {
 describe("job clock is independent of the personal workday", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    createClient.mockResolvedValue({ auth: { getUser: async () => ({ data: { user: { id: userId } } }) }, from: userFrom });
+    createClient.mockResolvedValue({ auth: { getUser: async () => ({ data: { user: { id: userId } } }) }, from: userFrom, rpc });
     adminClient.mockReturnValue({ from: adminFrom });
     canWorkLegacyJob.mockResolvedValue(true);
     hasMfaAssurance.mockResolvedValue(true);
@@ -51,16 +51,21 @@ describe("job clock is independent of the personal workday", () => {
     expect(userFrom).not.toHaveBeenCalled();
   });
 
-  it("rejects clock-out for a personal workday entry or another job", async () => {
-    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    const eq = vi.fn();
-    const chain = { eq, is: () => ({ maybeSingle }) };
-    eq.mockReturnValue(chain);
-    adminFrom.mockImplementation((table: string) => table === "profiles"
-      ? { select: () => ({ eq: () => ({ single: async () => ({ data: { status: "active" }, error: null }) }) }) }
-      : { select: () => chain });
-    expect(await clockOut(entryId, jobId)).toHaveProperty("error", "Clock entry does not belong to this job and worker.");
-    expect(eq).toHaveBeenCalledWith("job_id", jobId);
-    expect(adminFrom).not.toHaveBeenCalledWith("job_photos");
+  it("requires a current GPS fix and rejects an unconfirmed finish result", async () => {
+    expect(await clockOut(entryId, jobId)).toHaveProperty("error", "A current GPS location is required to finish this job.");
+    expect(rpc).not.toHaveBeenCalled();
+    rpc.mockResolvedValue({ data: { entryId: "other", clockOut: new Date().toISOString() }, error: null });
+    const gps = { latitude: 38, longitude: -85, accuracy_meters: 10, captured_at_device: new Date().toISOString() };
+    expect(await clockOut(entryId, jobId, gps)).toHaveProperty("error");
+    expect(rpc).toHaveBeenCalledWith("finish_legacy_job_clock", expect.objectContaining({
+      p_entry_id: entryId, p_job_id: jobId, p_latitude: 38,
+    }));
+    expect(adminFrom).not.toHaveBeenCalled();
+  });
+
+  it("accepts only the matching canonical finish acknowledgement", async () => {
+    const gps = { latitude: 38, longitude: -85, accuracy_meters: 10, captured_at_device: new Date().toISOString() };
+    rpc.mockResolvedValue({ data: { entryId, jobStatus: "completed", clockOut: new Date().toISOString() }, error: null });
+    expect(await clockOut(entryId, jobId, gps)).toEqual({ success: true, jobStatus: "completed" });
   });
 });
