@@ -6,6 +6,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { mfaDestination } from "@/lib/auth/mfa-flow";
+import { hasRecentTotp } from "@/lib/auth/recent-mfa";
 import { resetPasswordSchema, type ResetPasswordInput } from "@/lib/validations/auth";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import PasswordStrength from "@/components/forms/PasswordStrength";
@@ -29,21 +31,33 @@ export default function ResetPasswordPage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data }) => {
-      setSessionValid(!!data.session);
+    supabase.auth.getUser().then(async ({ data, error }) => {
+      if (error || !data.user) { setSessionValid(false); return; }
+      const assurance = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assurance.error || !assurance.data) { setSessionValid(false); return; }
+      const destination = mfaDestination(assurance.data.currentLevel,
+        assurance.data.nextLevel, "/reset-password");
+      if (destination || !hasRecentTotp(assurance.data.currentAuthenticationMethods)) {
+        router.replace(destination ?? "/mfa/challenge?next=%2Freset-password");
+        return;
+      }
+      setSessionValid(true);
     });
-  }, []);
+  }, [router]);
 
   async function onSubmit(data: ResetPasswordInput) {
     setServerError(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.updateUser({ password: data.password });
-    if (error) {
-      setServerError("Unable to reset password. The link may have expired. Please request a new one.");
+    const response = await fetch("/api/auth/password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "reset", password: data.password }),
+    });
+    if (!response.ok) {
+      setServerError("Unable to reset password. Verify your authenticator again or request a new link.");
       return;
     }
     setSuccess(true);
-    setTimeout(() => router.push("/dashboard"), 2500);
+    await createClient().auth.signOut({ scope: "global" });
+    setTimeout(() => router.push("/login?password_updated=1"), 1500);
   }
 
   if (sessionValid === null) {
@@ -71,7 +85,7 @@ export default function ResetPasswordPage() {
           </svg>
         </div>
         <h1 className="text-2xl font-bold text-charcoal">Password updated</h1>
-        <p className="mt-3 text-sm text-muted">Redirecting you to your dashboard…</p>
+        <p className="mt-3 text-sm text-muted">Sign in again with your new password.</p>
       </div>
     );
   }

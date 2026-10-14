@@ -1,7 +1,7 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
-import { customerSchema, type CustomerInput } from "@/lib/validations/customer";
+import { requireStaffUser } from "@/lib/api/auth";
+import { customerSchema, type CustomerInput } from "../validations/customer";
 import { logAudit } from "./audit";
 import { revalidatePath } from "next/cache";
 
@@ -11,9 +11,9 @@ export async function createCustomer(input: CustomerInput) {
     return { error: parsed.error.issues[0]?.message ?? "Validation failed" };
   }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+  const { supabase, user } = access;
 
   const d = parsed.data;
 
@@ -46,7 +46,7 @@ export async function createCustomer(input: CustomerInput) {
     .select("id")
     .single();
 
-  if (error) {
+  if (error || !data) {
     return { error: "Failed to create customer. Please try again." };
   }
 
@@ -67,19 +67,20 @@ export async function updateCustomer(id: string, input: CustomerInput) {
     return { error: parsed.error.issues[0]?.message ?? "Validation failed" };
   }
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+  const { supabase, user } = access;
 
   const d = parsed.data;
 
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("customers")
     .update({
       account_type: d.accountType,
       first_name: d.firstName,
       last_name: d.lastName,
       business_name: d.businessName ?? null,
+      primary_contact: d.primaryContact ?? null,
       email: d.email,
       mobile_phone: d.mobilePhone ?? null,
       alternate_phone: d.alternatePhone ?? null,
@@ -97,10 +98,12 @@ export async function updateCustomer(id: string, input: CustomerInput) {
       portal_access: d.portalAccess,
       updated_by: user.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .single();
 
-  if (error) {
-    return { error: "Failed to update customer." };
+  if (error || !saved) {
+    return { error: "Customer was not saved. Check access and retry." };
   }
 
   await logAudit({
@@ -115,16 +118,18 @@ export async function updateCustomer(id: string, input: CustomerInput) {
 }
 
 export async function archiveCustomer(id: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return { error: "Active Admin account with verified MFA required" };
+  const { supabase, user } = access;
 
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("customers")
     .update({ status: "archived", deleted_at: new Date().toISOString(), updated_by: user.id })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .single();
 
-  if (error) return { error: "Failed to archive customer." };
+  if (error || !saved) return { error: "Customer was not archived. Check access and retry." };
 
   await logAudit({ action: "archive", entityType: "customer", entityId: id });
   revalidatePath("/customers");

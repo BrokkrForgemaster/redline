@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm, useFieldArray, useWatch } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -57,9 +57,8 @@ export default function NewEstimatePage() {
     control,
     handleSubmit,
     formState: { errors, isSubmitting },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } = useForm<EstimateInput>({
-    resolver: zodResolver(estimateSchema) as any,
+    resolver: zodResolver(estimateSchema) as Resolver<EstimateInput>,
     defaultValues: {
       customerId: preselectedCustomerId,
       issueDate: today,

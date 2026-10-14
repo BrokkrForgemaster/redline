@@ -59,7 +59,7 @@ export default async function SnowEventsPage() {
                 </div>
                 <div className="mt-3 flex gap-4 text-xs text-muted">
                   <span>Priority: <strong className="text-charcoal capitalize">{event.operational_priority}</strong></span>
-                  {event.actual_snowfall_inches && <span>Snowfall: <strong className="text-charcoal">{event.actual_snowfall_inches}"</strong></span>}
+                  {event.actual_snowfall_inches && <span>Snowfall: <strong className="text-charcoal">{event.actual_snowfall_inches}&quot;</strong></span>}
                 </div>
               </Link>
             ))}

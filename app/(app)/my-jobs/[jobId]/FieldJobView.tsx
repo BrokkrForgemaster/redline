@@ -29,7 +29,7 @@ interface Job {
   scheduled_start: string | null;
   work_instructions: string | null;
   access_notes: string | null;
-  customers: { first_name: string; last_name: string; business_name: string | null } | null;
+  customers: { business_name: string | null } | null;
   properties: { address_line1: string; city: string; state: string } | null;
 }
 
@@ -199,9 +199,7 @@ export default function FieldJobView({
     return () => clearInterval(id);
   }, [activeEntry]);
 
-  const customerName =
-    job.customers?.business_name ??
-    (job.customers ? `${job.customers.first_name} ${job.customers.last_name}` : "");
+  const customerName = job.customers?.business_name ?? "Job site";
   const address = job.properties
     ? `${job.properties.address_line1}, ${job.properties.city}, ${job.properties.state}`
     : "";
@@ -210,7 +208,7 @@ export default function FieldJobView({
     : null;
   const jobLabel = job.title || SERVICE_LABELS[job.service_type] || "Job";
 
-  const canStart = localBefore >= BEFORE_REQUIRED;
+  const canStart = isLocationTagged && localBefore >= BEFORE_REQUIRED;
   const canClockOut = localAfter >= AFTER_REQUIRED;
   const isDone = !!completedEntry;
   const isActive = !isDone && !!activeEntry;
@@ -306,7 +304,7 @@ export default function FieldJobView({
             PHOTO_UPLOAD_TIMEOUT_MS,
             "Upload timed out. Check signal and try again."
           );
-          if (result.url) saved++;
+          if (result.photo_id) saved++;
           else toast.error(result.error ?? "Upload failed.");
         }
         if (saved > 0) {
@@ -537,7 +535,9 @@ export default function FieldJobView({
           </button>
           {!canStart && (
             <p className="text-center text-sm text-muted">
-              {BEFORE_REQUIRED} before photos required to start.
+              {!isLocationTagged
+                ? "Tag this job's site location before starting."
+                : `${BEFORE_REQUIRED} saved before photos required to start.`}
             </p>
           )}
         </div>

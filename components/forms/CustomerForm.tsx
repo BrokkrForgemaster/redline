@@ -60,22 +60,32 @@ export default function CustomerForm({ customer }: Props) {
   const taxExempt = watch("taxExempt");
 
   async function onSubmit(data: CustomerInput) {
-    const result = isEdit
-      ? await updateCustomer(customer!.id, data)
-      : await createCustomer(data);
+    try {
+      const result = isEdit
+        ? await updateCustomer(customer!.id, data)
+        : await createCustomer(data);
 
-    if (result.error) {
-      toast.error(result.error);
-      return;
+      if (result.error || !result.id) {
+        toast.error(result.error ?? "Customer was not saved. Please try again.");
+        return;
+      }
+
+      toast.success(isEdit ? "Customer updated" : "Customer created");
+      router.push(`/customers/${result.id}`);
+      router.refresh();
+    } catch {
+      toast.error("Customer was not saved. Check your connection and try again.");
     }
-
-    toast.success(isEdit ? "Customer updated" : "Customer created");
-    router.push(`/customers/${result.id ?? customer?.id}`);
-    router.refresh();
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+    <form onSubmit={handleSubmit(onSubmit, () => {
+      toast.error("Please correct the highlighted customer details before saving.");
+    })} className="space-y-8 pb-8">
+      {Object.keys(errors).length > 0 && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p className="font-semibold">Please correct these fields before saving:</p>
+        <ul className="mt-1 list-inside list-disc">{Object.entries(errors).map(([field, error]) => <li key={field}>{field}: {error?.message?.toString() ?? "Invalid value"}</li>)}</ul>
+      </div>}
       {/* Account Type */}
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-6">
         <h2 className="text-base font-semibold text-charcoal">Account Information</h2>
@@ -143,6 +153,7 @@ export default function CustomerForm({ customer }: Props) {
               <option value="phone">Phone call</option>
               <option value="text">Text message</option>
             </select>
+            {errors.preferredContact && <p className={errorClass}>{errors.preferredContact.message}</p>}
           </div>
         </div>
 
@@ -185,6 +196,7 @@ export default function CustomerForm({ customer }: Props) {
               <option value="">ST</option>
               {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
+            {errors.billingState && <p className={errorClass}>{errors.billingState.message}</p>}
           </div>
           <div>
             <label htmlFor="billingZip" className={labelClass}>ZIP</label>

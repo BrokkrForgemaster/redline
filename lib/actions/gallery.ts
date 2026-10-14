@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { logAudit } from "./audit";
 import { revalidatePath } from "next/cache";
+import { hasMfaAssurance } from "@/lib/api/auth";
 
 function getAdminClient() {
   return createAdminClient(
@@ -12,10 +13,21 @@ function getAdminClient() {
   );
 }
 
-export async function createGalleryProject(input: Record<string, unknown>) {
+async function requireGalleryManager() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  if (!user) return null;
+  const { data: profile, error } = await supabase.from("profiles")
+    .select("role, status").eq("id", user.id).single();
+  if (error || profile?.status !== "active" || profile.role !== "owner") return null;
+  if (!(await hasMfaAssurance(supabase))) return null;
+  return { supabase, user };
+}
+
+export async function createGalleryProject(input: Record<string, unknown>) {
+  const manager = await requireGalleryManager();
+  if (!manager) return { error: "Not authorized" };
+  const { supabase, user } = manager;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
@@ -40,9 +52,9 @@ export async function createGalleryProject(input: Record<string, unknown>) {
 }
 
 export async function updateGalleryProject(id: string, input: Record<string, unknown>) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const manager = await requireGalleryManager();
+  if (!manager) return { error: "Not authorized" };
+  const { supabase, user } = manager;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
@@ -64,9 +76,12 @@ export async function updateGalleryProject(id: string, input: Record<string, unk
 }
 
 export async function deleteGalleryProject(id: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const manager = await requireGalleryManager();
+  if (!manager) return { error: "Not authorized" };
+  const { supabase } = manager;
+
+  const { data: project } = await supabase.from("gallery_projects").select("id").eq("id", id).maybeSingle();
+  if (!project) return { error: "Project not found" };
 
   // Fetch storage paths of all images before deleting
   const { data: images } = await supabase
@@ -74,21 +89,16 @@ export async function deleteGalleryProject(id: string) {
     .select("storage_path")
     .eq("project_id", id);
 
-  // Delete storage files
-  const admin = getAdminClient();
-  if (images && images.length > 0) {
-    const paths = (images as { storage_path: string }[])
-      .map(i => i.storage_path)
-      .filter(Boolean);
-    if (paths.length > 0) {
-      await admin.storage.from("gallery").remove(paths);
-    }
-  }
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
-  const { error } = await sb.from("gallery_projects").delete().eq("id", id);
-  if (error) return { error: "Failed to delete project" };
+  const { data: deleted, error } = await sb.from("gallery_projects").delete().eq("id", id).select("id").maybeSingle();
+  if (error || !deleted) return { error: "Failed to delete project" };
+
+  const paths = ((images ?? []) as { storage_path: string }[]).map(i => i.storage_path).filter(Boolean);
+  if (paths.length) {
+    const { error: storageError } = await getAdminClient().storage.from("gallery").remove(paths);
+    if (storageError) return { error: "Project deleted; image cleanup needs attention" };
+  }
 
   await logAudit({ action: "delete", entityType: "gallery_project", entityId: id });
 
@@ -98,20 +108,29 @@ export async function deleteGalleryProject(id: string) {
 }
 
 export async function uploadGalleryImage(formData: FormData, projectId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const manager = await requireGalleryManager();
+  if (!manager) return { error: "Not authorized" };
+  const { supabase, user } = manager;
+  const { data: project, error: projectError } = await supabase.from("gallery_projects")
+    .select("id").eq("id", projectId).maybeSingle();
+  if (projectError || !project) return { error: "Project not found" };
 
   const file = formData.get("file") as File | null;
   if (!file) return { error: "No file provided" };
+  if (file.size < 1 || file.size > 15 * 1024 * 1024) return { error: "Image must be under 15 MB" };
+  const header = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  const jpeg = header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+  const png = header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+  const webp = String.fromCharCode(...header.slice(0, 4)) === "RIFF" && String.fromCharCode(...header.slice(8, 12)) === "WEBP";
+  if (!jpeg && !png && !webp) return { error: "Unsupported image content" };
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const ext = jpeg ? "jpg" : png ? "png" : "webp";
   const storagePath = `${projectId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
   const admin = getAdminClient();
   const { error: uploadError } = await admin.storage
     .from("gallery")
-    .upload(storagePath, file, { contentType: file.type, upsert: false });
+    .upload(storagePath, file, { contentType: jpeg ? "image/jpeg" : png ? "image/png" : "image/webp", upsert: false });
 
   if (uploadError) return { error: `Upload failed: ${uploadError.message}` };
 
@@ -162,19 +181,24 @@ export async function uploadGalleryImage(formData: FormData, projectId: string) 
   }};
 }
 
-export async function deleteGalleryImage(imageId: string, storagePath: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+export async function deleteGalleryImage(imageId: string) {
+  const manager = await requireGalleryManager();
+  if (!manager) return { error: "Not authorized" };
+  const { supabase } = manager;
+
+  const { data: image, error: lookupError } = await supabase.from("gallery_images")
+    .select("id, storage_path").eq("id", imageId).maybeSingle();
+  if (lookupError || !image) return { error: "Image not found" };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
-  const { error } = await sb.from("gallery_images").delete().eq("id", imageId);
-  if (error) return { error: "Failed to delete image" };
+  const { data: deleted, error } = await sb.from("gallery_images").delete().eq("id", imageId).select("id").maybeSingle();
+  if (error || !deleted) return { error: "Failed to delete image" };
 
-  if (storagePath) {
+  if (image.storage_path) {
     const admin = getAdminClient();
-    await admin.storage.from("gallery").remove([storagePath]);
+    const { error: storageError } = await admin.storage.from("gallery").remove([image.storage_path]);
+    if (storageError) return { error: "Image record deleted; storage cleanup needs attention" };
   }
 
   revalidatePath("/media");
@@ -188,9 +212,9 @@ export async function updateGalleryImage(imageId: string, data: {
   image_type?: string;
   sort_order?: number;
 }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  const manager = await requireGalleryManager();
+  if (!manager) return { error: "Not authorized" };
+  const { supabase } = manager;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;

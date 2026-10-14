@@ -2,6 +2,7 @@ export const FIELD_DB_NAME = "redline-field-v1";
 export const FIELD_DB_VERSION = 1;
 
 export interface PendingMutation {
+  owner_user_id?: string;
   id: string;
   idempotency_key: string;
   action: string;
@@ -16,6 +17,7 @@ export interface PendingMutation {
 }
 
 export interface PendingMedia {
+  owner_user_id?: string;
   id: string;
   service_run_id: string;
   blob: Blob;
@@ -99,18 +101,20 @@ export function idbGet<T>(db: IDBDatabase, storeName: string, key: string): Prom
 export function idbPut(db: IDBDatabase, storeName: string, value: unknown): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
-    const req = tx.objectStore(storeName).put(value);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    tx.objectStore(storeName).put(value);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error ?? new Error("Local save was aborted."));
+    tx.onerror = () => reject(tx.error ?? new Error("Local save failed."));
   });
 }
 
 export function idbDelete(db: IDBDatabase, storeName: string, key: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(storeName, "readwrite");
-    const req = tx.objectStore(storeName).delete(key);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    tx.objectStore(storeName).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error ?? new Error("Local deletion was aborted."));
+    tx.onerror = () => reject(tx.error ?? new Error("Local deletion failed."));
   });
 }
 

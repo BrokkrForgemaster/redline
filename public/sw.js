@@ -45,6 +45,8 @@ function isStaticAsset(url) {
 function isNetworkOnly(url) {
   // Supabase, our API routes, and auth flows must never be cached
   return (
+    ((self.location.hostname === "localhost" || self.location.hostname === "127.0.0.1") &&
+      url.pathname.startsWith("/_next/")) ||
     url.hostname.includes("supabase.co") ||
     url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/auth/") ||
@@ -90,16 +92,16 @@ self.addEventListener("install", (event) => {
 // ─────────────────────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
+    caches.delete(PAGES_CACHE).then(() => caches
       .keys()
       .then((names) =>
         Promise.all(
           names
-            .filter((name) => !KNOWN_CACHES.includes(name))
+            .filter((name) => !KNOWN_CACHES.includes(name) || name.startsWith("redline-pages"))
             .map((name) => caches.delete(name))
         )
       )
-      .then(() => self.clients.claim())
+      .then(() => self.clients.claim()))
   );
 });
 
@@ -131,7 +133,9 @@ self.addEventListener("fetch", (event) => {
     } else {
       // Admin / auth pages: network-first
       // → tries fresh data, falls back to cached page from last visit
-      event.respondWith(networkFirstWithCacheFallback(request, PAGES_CACHE));
+      event.respondWith(fetch(request).catch(async () =>
+        (await caches.match(OFFLINE_URL)) ?? new Response("Offline", { status: 503 })
+      ));
     }
   }
 });
@@ -236,9 +240,25 @@ self.addEventListener("message", (event) => {
   }
 });
 
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try { payload = event.data?.json() ?? {}; } catch { /* Use a generic alert. */ }
+  const target = typeof payload.url === "string" && payload.url.startsWith("/") && !payload.url.startsWith("//")
+    ? payload.url : "/dashboard";
+  event.waitUntil(self.registration.showNotification("Redline alert", {
+    body: "A work update is available. Open the app to view it.",
+    icon: "/images/logo.png",
+    badge: "/images/logo.png",
+    tag: typeof payload.eventId === "string" ? payload.eventId : "redline-work-update",
+    data: { url: target },
+  }));
+});
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "/dashboard";
+  const rawUrl = event.notification.data?.url;
+  const targetUrl = typeof rawUrl === "string" && rawUrl.startsWith("/") && !rawUrl.startsWith("//")
+    ? rawUrl : "/dashboard";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {

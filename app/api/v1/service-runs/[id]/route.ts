@@ -1,13 +1,17 @@
-import { requireStaffUser } from "@/lib/api/auth";
+import { requireApiUser } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/errors";
+import { requireServiceRunAccess } from "@/lib/api/service-access";
+import { createAdminClient } from "@/lib/supabase/server";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const auth = await requireStaffUser("staff");
+  const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
 
   const { id } = await params;
+  const access = await requireServiceRunAccess(auth.supabase, auth.user.id, id);
+  if (!access.ok) return access.response;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = auth.supabase as any;
+  const sb = createAdminClient() as any;
 
   const { data: run, error: runError } = await sb
     .from("service_runs")
@@ -15,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       `id, status, started_at, finished_at, submitted_at, reviewed_at, reviewed_by,
        approved_at, rejected_at, rejection_reason, version_number, created_at,
        work_orders(id, work_order_number, title, scheduled_start, instructions,
-         customers(id, first_name, last_name, business_name),
+         customers(business_name),
          properties(id, address_line1, city, state, zip)
        ),
        profiles!service_runs_primary_worker_id_fkey(id, first_name, last_name)`

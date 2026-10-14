@@ -3,6 +3,7 @@
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { z } from "zod";
 import { createLead } from "@/lib/actions/leads";
@@ -188,9 +189,9 @@ export default function LeadForm() {
           {isSubmitting && <Loader2 size={15} className="animate-spin" />}
           {isSubmitting ? "Creating…" : "Create Lead"}
         </button>
-        <a href="/leads" className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+        <Link href="/leads" className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
           Cancel
-        </a>
+        </Link>
       </div>
     </form>
   );

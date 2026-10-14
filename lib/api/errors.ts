@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 
 export type ApiErrorCode =
   | "AUTH_REQUIRED"
+  | "ACCOUNT_INACTIVE"
+  | "MFA_REQUIRED"
   | "FORBIDDEN"
   | "ASSIGNMENT_REQUIRED"
   | "INVALID_STATE_TRANSITION"

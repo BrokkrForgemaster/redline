@@ -21,13 +21,18 @@ export default async function FieldJobPage({
     .select(`
       id, job_number, title, service_type, status,
       scheduled_start, work_instructions, access_notes,
-      customers(first_name, last_name, business_name),
+      customers(business_name),
       properties(address_line1, city, state)
     `)
     .eq("id", jobId)
     .single();
 
   if (!job) notFound();
+  const { data: businessName, error: businessError } = await sb.rpc("assigned_legacy_business_name", {
+    p_job_id: jobId,
+  });
+  if (businessError || typeof businessName !== "string") notFound();
+  job.customers = { business_name: businessName };
 
   // Active (open) time entry for this employee on this job
   const { data: activeEntry } = await sb

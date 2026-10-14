@@ -8,16 +8,39 @@ import Link from "next/link";
 export default function SecuritySettingsPage() {
   const [mfaFactors, setMfaFactors] = useState<{ id: string; status: string; created_at: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOwner, setIsOwner] = useState(false);
+  const [factorError, setFactorError] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.mfa.listFactors().then(({ data }) => {
+    supabase.auth.mfa.listFactors().then(({ data, error }) => {
+      if (error) setFactorError("Could not load authenticator factors.");
       setMfaFactors(data?.totp ?? []);
       setLoading(false);
+    });
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      setIsOwner(profile?.role === "owner");
     });
   }, []);
 
   const hasMfa = mfaFactors.some(f => f.status === "verified");
+  const verifiedFactors = mfaFactors.filter(f => f.status === "verified");
+
+  async function removeFactor(id: string) {
+    if (!window.confirm("Remove this authenticator? Your other verified factor will remain active.")) return;
+    setFactorError(null);
+    const response = await fetch(`/api/auth/mfa/factors/${id}/remove`, { method: "POST" });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      setFactorError(body.error ?? "Authenticator could not be removed.");
+      return;
+    }
+    const { data, error } = await createClient().auth.mfa.listFactors();
+    if (error) { setFactorError("Authenticator removed, but the list could not be refreshed."); return; }
+    setMfaFactors(data?.totp ?? []);
+  }
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -54,18 +77,33 @@ export default function SecuritySettingsPage() {
             ? "Your account is protected with Google Authenticator-compatible MFA."
             : "Add an extra layer of security by enabling two-factor authentication with an authenticator app."}
         </p>
-        {!loading && (
+        {!loading && !hasMfa && (
           <Link
-            href="/auth/mfa/enroll"
+            href="/auth/mfa/enroll?next=%2Fsettings%2Fsecurity"
             className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${hasMfa
               ? "border border-gray-200 text-charcoal hover:bg-gray-50"
               : "bg-redline text-white hover:bg-redline-dark"}`}
           >
             <Shield size={14} />
-            {hasMfa ? "Manage MFA" : "Enable MFA"}
+            Enable MFA
           </Link>
         )}
+        {hasMfa && <div className="space-y-3">
+          <p className="text-sm">{verifiedFactors.length} verified authenticator{verifiedFactors.length === 1 ? "" : "s"}.</p>
+          <Link href="/auth/mfa/enroll?add=1&next=%2Fsettings%2Fsecurity" className="inline-block rounded bg-redline px-4 py-2 text-sm font-medium text-white">
+            Add another authenticator
+          </Link>
+          {verifiedFactors.map((factor, index) => <div key={factor.id} className="flex items-center justify-between rounded border p-3 text-sm">
+            <span>Authenticator {index + 1} · added {new Date(factor.created_at).toLocaleDateString()}</span>
+            {verifiedFactors.length > 1 && <button type="button" onClick={() => removeFactor(factor.id)} className="text-redline underline">Remove</button>}
+          </div>)}
+        </div>}
+        {factorError && <p role="alert" className="text-sm text-red-700">{factorError}</p>}
       </div>
+
+      {isOwner && <Link href="/settings/security/recovery" className="block rounded-xl border bg-white p-5 text-sm font-medium text-redline">
+        Review staff MFA recovery requests
+      </Link>}
 
       {/* Password */}
       <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">

@@ -11,7 +11,7 @@ export default async function SettingsPage() {
   if (!user) redirect("/auth/login");
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-  const isAdmin = profile?.role === "owner" || profile?.role === "developer";
+  const isAdmin = profile?.role === "owner";
 
   const { data: settings } = await supabase.from("business_settings").select("*").single();
 

@@ -72,8 +72,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const isAuthRoute = (url.pathname === "/login" && !url.searchParams.has("error")) ||
-    url.pathname === "/forgot-password" ||
-    url.pathname === "/reset-password";
+    url.pathname === "/forgot-password";
 
   if (!user && (isPortalRoute || isProtected)) {
     const redirectUrl = request.nextUrl.clone();
@@ -84,7 +83,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && isAuthRoute) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/dashboard";
+    redirectUrl.pathname = "/auth/setup";
     return NextResponse.redirect(redirectUrl);
   }
 

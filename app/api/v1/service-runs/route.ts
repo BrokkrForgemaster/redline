@@ -2,7 +2,7 @@ import { requireStaffUser } from "@/lib/api/auth";
 import { apiError, apiOk } from "@/lib/api/errors";
 
 export async function GET(request: Request) {
-  const auth = await requireStaffUser("staff");
+  const auth = await requireStaffUser("reviewer");
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);

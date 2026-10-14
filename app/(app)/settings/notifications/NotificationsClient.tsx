@@ -1,242 +1,117 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { toast } from "sonner";
-import { BellRing, Mail, Smartphone, Info, Save } from "lucide-react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { BellRing, Smartphone } from "lucide-react";
 
-const EMAIL_PREFS_KEY = "redline_email_notification_prefs";
-const EMAIL_ADDRESS_KEY = "redline_notification_email";
-const PUSH_ENABLED_KEY = "redline_push_notifications_enabled";
-
-interface EmailPrefs {
-  new_leads: boolean;
-  job_activity: boolean;
+function decodeVapidKey(value: string): Uint8Array<ArrayBuffer> {
+  const padded = value.padEnd(Math.ceil(value.length / 4) * 4, "=").replace(/-/g, "+").replace(/_/g, "/");
+  const decoded = atob(padded);
+  const bytes = new Uint8Array(new ArrayBuffer(decoded.length));
+  for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+  return bytes;
 }
 
-const DEFAULT_PREFS: EmailPrefs = {
-  new_leads: true,
-  job_activity: true,
-};
-
-export default function NotificationsClient({ defaultEmail }: { defaultEmail: string }) {
-  const [emailPrefs, setEmailPrefs] = useState<EmailPrefs>(DEFAULT_PREFS);
-  const [notificationEmail, setNotificationEmail] = useState(defaultEmail);
-  const [pushEnabled, setPushEnabled] = useState(false);
-  const [pushSupported, setPushSupported] = useState(false);
-  const [permission, setPermission] = useState<NotificationPermission>("default");
-  const [loaded, setLoaded] = useState(false);
+export default function NotificationsClient() {
+  const [supported, setSupported] = useState(false);
+  const [publicKey, setPublicKey] = useState<string | null>(null);
+  const [enabledOnDevice, setEnabledOnDevice] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
+    const timer = window.setTimeout(async () => {
+      const available = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+      setSupported(available);
+      if (!available) return;
       try {
-        const saved = localStorage.getItem(EMAIL_PREFS_KEY);
-        const savedEmail = localStorage.getItem(EMAIL_ADDRESS_KEY);
-        const savedPush = localStorage.getItem(PUSH_ENABLED_KEY);
-
-        if (saved) setEmailPrefs({ ...DEFAULT_PREFS, ...(JSON.parse(saved) as Partial<EmailPrefs>) });
-        if (savedEmail) setNotificationEmail(savedEmail);
-        setPushEnabled(savedPush === "true");
-        setPushSupported("serviceWorker" in navigator && "Notification" in window);
-        if ("Notification" in window) setPermission(Notification.permission);
+        const response = await fetch("/api/v1/push/subscription", { cache: "no-store" });
+        if (!response.ok) throw new Error("Push settings are unavailable.");
+        const settings = await response.json() as { publicKey: string };
+        setPublicKey(settings.publicKey);
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+        if (subscription) {
+          const status = await fetch("/api/v1/push/subscription", {
+            method: "PUT", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+          });
+          if (status.ok) setEnabledOnDevice((await status.json()).registered === true);
+        }
       } catch {
-        // Ignore malformed local preferences.
+        setError("Push settings could not be loaded. In-app alerts remain available.");
       }
-      setLoaded(true);
     }, 0);
-
-    return () => window.clearTimeout(id);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const handleToggle = (key: keyof EmailPrefs) => {
-    setEmailPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const handleSave = () => {
+  async function enablePush() {
+    if (!supported || !publicKey) return;
+    setWorking(true);
+    setError(null);
     try {
-      localStorage.setItem(EMAIL_PREFS_KEY, JSON.stringify(emailPrefs));
-      localStorage.setItem(EMAIL_ADDRESS_KEY, notificationEmail.trim());
-      localStorage.setItem(PUSH_ENABLED_KEY, String(pushEnabled));
-      toast.success("Notification preferences saved");
-    } catch {
-      toast.error("Failed to save preferences");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("Notification permission was not granted.");
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: decodeVapidKey(publicKey),
+      });
+      const response = await fetch("/api/v1/push/subscription", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subscription.toJSON()),
+      });
+      if (!response.ok || (await response.json()).saved !== true) {
+        throw new Error("The device subscription was not saved. Please retry.");
+      }
+      setEnabledOnDevice(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not enable push alerts.");
+    } finally {
+      setWorking(false);
     }
-  };
+  }
 
-  const handleEnablePush = async () => {
-    if (!pushSupported) {
-      toast.error("Push notifications are not supported in this browser.");
-      return;
+  async function disablePush() {
+    setWorking(true);
+    setError(null);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        const response = await fetch("/api/v1/push/subscription", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        if (!response.ok) throw new Error("Could not disable server push delivery. Please retry.");
+        await subscription.unsubscribe();
+      }
+      setEnabledOnDevice(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not disable push alerts.");
+    } finally {
+      setWorking(false);
     }
-
-    const nextPermission = await Notification.requestPermission();
-    setPermission(nextPermission);
-    if (nextPermission !== "granted") {
-      setPushEnabled(false);
-      toast.error("Notification permission was not granted.");
-      return;
-    }
-
-    const registration = await navigator.serviceWorker.ready;
-    setPushEnabled(true);
-    localStorage.setItem(PUSH_ENABLED_KEY, "true");
-    registration.showNotification("Redline alerts enabled", {
-      body: "New in-app job alerts will also appear as PWA notifications on this device.",
-      icon: "/images/logo.png",
-      badge: "/images/logo.png",
-      tag: "redline-alerts-enabled",
-      data: { url: "/dashboard" },
-    });
-    toast.success("Push notifications enabled");
-  };
-
-  const handleTestPush = async () => {
-    if (permission !== "granted") {
-      await handleEnablePush();
-      return;
-    }
-
-    const registration = await navigator.serviceWorker.ready;
-    registration.showNotification("Test Redline alert", {
-      body: "This is how job alerts will appear on this device.",
-      icon: "/images/logo.png",
-      badge: "/images/logo.png",
-      tag: "redline-test-alert",
-      data: { url: "/dashboard" },
-    });
-  };
-
-  if (!loaded) return null;
+  }
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-charcoal">Notifications</h1>
-        <p className="text-sm text-muted mt-1">
-          Control how and when you receive notifications.
-        </p>
+        <p className="mt-1 text-sm text-muted">Server push is optional. Your in-app inbox remains available when push is off or delayed.</p>
       </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
-        <Info size={16} className="text-blue-500 mt-0.5 flex-shrink-0" />
-        <p className="text-sm text-blue-700">
-          In-app alerts update the dashboard and jobs pages in realtime. PWA alerts appear on
-          this device after browser permission is granted.
-        </p>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-            <Smartphone size={18} className="text-muted" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-charcoal">Push Notifications</h2>
-            <p className="text-xs text-muted">Browser, PWA, and mobile home-screen alerts</p>
-          </div>
-        </div>
-        <div className="flex items-center justify-between gap-4 py-2 border-t border-gray-100">
-          <div>
-            <p className="text-sm font-medium text-charcoal">Enable Push Notifications</p>
-            <p className="text-xs text-muted mt-0.5">
-              Allows new in-app alerts to also show as device notifications.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={handleEnablePush}
-            disabled={!pushSupported || permission === "denied"}
-            className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 disabled:opacity-50 ${
-              pushEnabled && permission === "granted" ? "bg-redline" : "bg-gray-200"
-            }`}
-            aria-label="Enable push notifications"
-          >
-            <div
-              className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                pushEnabled && permission === "granted" ? "translate-x-5" : "translate-x-1"
-              }`}
-            />
-          </button>
-        </div>
-        <button
-          type="button"
-          onClick={handleTestPush}
-          disabled={!pushSupported || permission === "denied"}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-redline hover:underline disabled:text-muted disabled:no-underline"
-        >
-          <BellRing size={14} />
-          Test push alert
+      <div className="space-y-4 rounded-xl border bg-white p-6">
+        <div className="flex items-center gap-3"><Smartphone size={20} className="text-redline" /><h2 className="font-semibold">Push alerts on this device</h2></div>
+        <p className="text-sm text-muted">Install the app where required, then enable notifications from this device. Delivery depends on your browser and phone settings.</p>
+        <p className="text-sm font-medium">{enabledOnDevice ? "Enabled and saved on server" : supported ? "Not enabled on this device" : "Push is unavailable in this browser"}</p>
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        <button type="button" onClick={enabledOnDevice ? disablePush : enablePush}
+          disabled={!supported || !publicKey || working}
+          className="inline-flex items-center gap-2 rounded-lg bg-redline px-4 py-2 font-semibold text-white disabled:opacity-50">
+          <BellRing size={16} /> {working ? "Saving…" : enabledOnDevice ? "Disable on this device" : "Enable alerts"}
         </button>
       </div>
-
-      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center">
-            <Mail size={18} className="text-muted" />
-          </div>
-          <div>
-            <h2 className="font-semibold text-charcoal">Email Notifications</h2>
-            <p className="text-xs text-muted">Alerts sent to the email address below</p>
-          </div>
-        </div>
-
-        <div className="space-y-4 border-t border-gray-100 pt-3">
-          <div>
-            <label htmlFor="notification-email" className="block text-sm font-medium text-charcoal">
-              Notification Email
-            </label>
-            <input
-              id="notification-email"
-              type="email"
-              value={notificationEmail}
-              onChange={(event) => setNotificationEmail(event.target.value)}
-              className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-redline focus:ring-2 focus:ring-redline/20"
-              placeholder="alerts@example.com"
-              autoComplete="email"
-            />
-            <p className="text-xs text-muted mt-1">
-              Server email delivery still requires an email provider to be configured.
-            </p>
-          </div>
-
-          {(
-            [
-              { key: "new_leads" as const, label: "New Leads", desc: "When a new lead is submitted" },
-              { key: "job_activity" as const, label: "Job Started / Finished", desc: "When a subcontractor starts or finishes a job" },
-            ] satisfies { key: keyof EmailPrefs; label: string; desc: string }[]
-          ).map(({ key, label, desc }) => (
-            <div key={key} className="flex items-center justify-between py-2">
-              <div>
-                <p className="text-sm font-medium text-charcoal">{label}</p>
-                <p className="text-xs text-muted">{desc}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => handleToggle(key)}
-                className={`w-10 h-6 rounded-full relative transition-colors flex-shrink-0 ${
-                  emailPrefs[key] ? "bg-redline" : "bg-gray-200"
-                }`}
-                aria-label={`Toggle ${label}`}
-              >
-                <div
-                  className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-                    emailPrefs[key] ? "translate-x-5" : "translate-x-1"
-                  }`}
-                />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          onClick={handleSave}
-          className="flex items-center gap-2 bg-redline text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-redline-dark transition-colors"
-        >
-          <Save size={14} />
-          Save Preferences
-        </button>
-      </div>
+      <p className="text-sm text-muted">Open <Link href="/dashboard" className="text-redline underline">your dashboard</Link> for in-app alerts. Push acceptance does not mark an alert read.</p>
     </div>
   );
 }

@@ -2,19 +2,25 @@ import { createClient } from "@/lib/supabase/server";
 import RoleSelect from "./RoleSelect";
 import { Users } from "lucide-react";
 import type { Profile } from "@/types/database";
+import { redirect } from "next/navigation";
 
 export const metadata = { title: "Roles & Permissions" };
 
 const ROLE_LABELS: Record<string, string> = {
-  developer: "Developer",
-  owner: "Owner",
+  developer: "Developer Support",
+  owner: "Admin (Owner)",
   subcontractor: "Subcontractor",
-  crew_leader: "Crew Leader",
-  crew_member: "Crew Member",
+  mowing_crew_lead: "Mowing Crew Lead",
+  mowing_crew_laborer: "Mowing Crew Laborer",
+  snow_plow_operator: "Snow Plow Operator",
 };
 
 export default async function RolesPage() {
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { data: actor } = await supabase.from("profiles").select("role, status").eq("id", user.id).single();
+  if (actor?.role !== "owner" || actor.status !== "active") redirect("/dashboard");
   const { data: rawProfiles } = await supabase
     .from("profiles")
     .select("id, email, first_name, last_name, role, status")
@@ -35,11 +41,12 @@ export default async function RolesPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h2 className="font-semibold text-charcoal mb-3 text-sm">Role Hierarchy</h2>
         <div className="flex flex-col gap-2 text-xs text-muted">
-          <div><span className="font-medium text-charcoal">Developer</span> — Full system access including developer tools</div>
-          <div><span className="font-medium text-charcoal">Owner</span> — Full access to all features, settings, and reports</div>
+          <div><span className="font-medium text-charcoal">Developer Support</span> — Technical support only; no Admin privileges</div>
+          <div><span className="font-medium text-charcoal">Admin</span> — Owner only</div>
           <div><span className="font-medium text-charcoal">Subcontractor</span> — View and complete assigned work orders</div>
-          <div><span className="font-medium text-charcoal">Crew Leader</span> — Manage crew, view and update assigned jobs</div>
-          <div><span className="font-medium text-charcoal">Crew Member</span> — Clock in/out, view assigned schedule</div>
+          <div><span className="font-medium text-charcoal">Mowing Crew Lead</span> — View and update assigned crew work</div>
+          <div><span className="font-medium text-charcoal">Mowing Crew Laborer</span> — View and update assigned work</div>
+          <div><span className="font-medium text-charcoal">Snow Plow Operator</span> — View and update assigned snow work</div>
         </div>
       </div>
 

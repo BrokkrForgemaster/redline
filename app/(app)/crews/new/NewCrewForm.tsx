@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { createCrew } from "@/lib/actions/crews";
+import Link from "next/link";
 
 interface Employee {
   id: string;
@@ -13,12 +14,16 @@ interface Employee {
   role: string;
 }
 
-export default function NewCrewForm({ employees }: { employees: Employee[] }) {
+export default function NewCrewForm({ employees, companies }: {
+  employees: Employee[];
+  companies: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [leaderId, setLeaderId] = useState("");
+  const [companyId, setCompanyId] = useState("");
 
   const fieldClass =
     "block w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-charcoal placeholder:text-muted focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors";
@@ -34,12 +39,13 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
         name,
         description,
         leader_id: leaderId || undefined,
+        subcontractor_company_id: companyId || undefined,
       });
-      if (result.error) {
-        toast.error(result.error);
-      } else {
+      if ("id" in result && result.id) {
         toast.success("Crew created");
         router.push(`/crews/${result.id}`);
+      } else {
+        toast.error(result.error ?? "Crew was not created");
       }
     });
   }
@@ -47,6 +53,14 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-charcoal mb-1">Crew company</label>
+          <select value={companyId} onChange={e => { setCompanyId(e.target.value); setLeaderId(""); }} className={fieldClass}>
+            <option value="">Redline crew</option>
+            {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+          </select>
+          {companyId && <p className="mt-1 text-xs text-muted">Add active members of this company after creating the crew.</p>}
+        </div>
         <div>
           <label className="block text-sm font-medium text-charcoal mb-1">
             Crew Name <span className="text-redline">*</span>
@@ -65,7 +79,7 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
           <label className="block text-sm font-medium text-charcoal mb-1">
             Crew Leader
           </label>
-          <select
+          <select disabled={!!companyId}
             value={leaderId}
             onChange={e => setLeaderId(e.target.value)}
             className={fieldClass}
@@ -95,12 +109,12 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
       </div>
 
       <div className="flex items-center justify-end gap-3">
-        <a
+        <Link
           href="/crews"
           className="px-4 py-2 text-sm font-medium border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors text-charcoal"
         >
           Cancel
-        </a>
+        </Link>
         <button
           type="submit"
           disabled={isPending}

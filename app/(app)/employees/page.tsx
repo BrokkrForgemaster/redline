@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, UserCog } from "lucide-react";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -15,7 +16,7 @@ function employeeStatusBadge(status: string): {
   const map: Record<string, { label: string; variant: "green" | "red" | "yellow" | "gray" }> = {
     active: { label: "Active", variant: "green" },
     suspended: { label: "Suspended", variant: "red" },
-    invited: { label: "Invited", variant: "yellow" },
+    invited: { label: "Setup required", variant: "yellow" },
     inactive: { label: "Inactive", variant: "gray" },
   };
   return map[status] ?? { label: status, variant: "gray" };
@@ -31,7 +32,9 @@ export default async function EmployeesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { status } = await searchParams;
-  const supabase = await createClient();
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) redirect("/dashboard");
+  const supabase = access.supabase;
 
   let query = supabase
     .from("profiles")
@@ -39,13 +42,17 @@ export default async function EmployeesPage({
     .neq("role", "customer")
     .order("last_name");
 
-  if (status && status !== "all") {
+  if (status && ["active", "inactive", "invited", "suspended"].includes(status)) {
     query = query.eq("status", status as EmployeeStatus);
   }
 
-  const { data: employees } = await query;
-
-  const tabs = ["all", "active", "inactive"];
+  const { data: employees, error } = await query;
+  if (error) throw new Error("Employee list is unavailable.");
+  const { data: pendingSetups, error: setupError } = await supabase.from("staff_account_setups")
+    .select("user_id,assigned_role").eq("status", "pending");
+  if (setupError) throw new Error("Staff account setup data is unavailable. Apply the owner-provisioned account migration.");
+  const pendingRoles = new Map((pendingSetups ?? []).map(item => [item.user_id, item.assigned_role]));
+  const tabs = ["all", "active", "invited", "inactive"];
 
   return (
     <div className="space-y-6">
@@ -55,11 +62,11 @@ export default async function EmployeesPage({
           <p className="text-sm text-muted">{employees?.length ?? 0} total</p>
         </div>
         <Link
-          href="/employees/invite"
+          href="/employees/new"
           className="flex items-center gap-2 bg-redline text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-redline-dark transition-colors"
         >
           <Plus size={16} />
-          Invite Employee
+          Create Staff Account
         </Link>
       </div>
 
@@ -89,13 +96,13 @@ export default async function EmployeesPage({
             <p className="text-sm text-muted mt-1">
               {status && status !== "all"
                 ? `No ${status} employees`
-                : "Invite your first employee to get started"}
+                : "Create your first staff account to get started"}
             </p>
             <Link
-              href="/employees/invite"
+              href="/employees/new"
               className="mt-4 inline-block text-sm text-redline hover:underline"
             >
-              Invite Employee
+              Create Staff Account
             </Link>
           </div>
         ) : (
@@ -141,7 +148,7 @@ export default async function EmployeesPage({
                         {employee.email ?? "—"}
                       </td>
                       <td className="px-5 py-3 text-muted capitalize hidden sm:table-cell">
-                        {employee.role?.replace(/_/g, " ") ?? "—"}
+                        {(pendingRoles.get(employee.id) ?? employee.role)?.replace(/_/g, " ") ?? "—"}
                       </td>
                       <td className="px-5 py-3">
                         <StatusBadge label={badge.label} variant={badge.variant} />

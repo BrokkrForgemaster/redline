@@ -155,7 +155,7 @@ export default async function SnowEventDetailPage({ params }: { params: Promise<
               {event.actual_snowfall_inches != null && (
                 <div>
                   <p className="text-muted mb-0.5 flex items-center gap-1"><Snowflake size={12} /> Actual Snowfall</p>
-                  <p className="text-charcoal font-medium">{event.actual_snowfall_inches}"</p>
+                  <p className="text-charcoal font-medium">{event.actual_snowfall_inches}&quot;</p>
                 </div>
               )}
               <div>
