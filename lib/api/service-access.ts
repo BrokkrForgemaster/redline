@@ -39,10 +39,22 @@ export async function requireWorkOrderAccess(
   if (directError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify assignment.") };
   if (direct?.length) return { ok: true as const, workOrder };
 
+  const { data: companies, error: companyError } = await sb.from("subcontractor_memberships")
+    .select("subcontractor_company_id, subcontractor_companies!inner(status)")
+    .eq("user_id", userId).eq("active", true).eq("subcontractor_companies.status", "active");
+  if (companyError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify company membership.") };
+  const companyIds = ((companies ?? []) as { subcontractor_company_id: string }[])
+    .map(row => row.subcontractor_company_id);
+  const currentCompanies = new Set(companyIds);
   const { data: memberships, error: crewError } = await sb.from("crew_members")
-    .select("crew_id, crews!inner(active)").eq("employee_id", userId).eq("crews.active", true);
+    .select("crew_id, crews!inner(active,subcontractor_company_id)")
+    .eq("employee_id", userId).eq("crews.active", true);
   if (crewError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify crew membership.") };
-  const crewIds = ((memberships ?? []) as { crew_id: string }[]).map(row => row.crew_id);
+  const crewIds = ((memberships ?? []) as {
+    crew_id: string; crews: { subcontractor_company_id: string | null };
+  }[]).filter(row => row.crews.subcontractor_company_id
+    ? profile.role === "subcontractor" && currentCompanies.has(row.crews.subcontractor_company_id)
+    : profile.role !== "subcontractor").map(row => row.crew_id);
   if (crewIds.length) {
     const { data: crew, error: assignmentError } = await sb.from("work_order_assignments")
       .select("id").eq("work_order_id", workOrderId).eq("active", true)
@@ -50,13 +62,6 @@ export async function requireWorkOrderAccess(
     if (assignmentError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify crew assignment.") };
     if (crew?.length) return { ok: true as const, workOrder };
   }
-
-  const { data: companies, error: companyError } = await sb.from("subcontractor_memberships")
-    .select("subcontractor_company_id, subcontractor_companies!inner(status)")
-    .eq("user_id", userId).eq("active", true).eq("subcontractor_companies.status", "active");
-  if (companyError) return { ok: false as const, response: apiError(500, "INTERNAL_ERROR", "Could not verify company membership.") };
-  const companyIds = ((companies ?? []) as { subcontractor_company_id: string }[])
-    .map(row => row.subcontractor_company_id);
   if (companyIds.length) {
     const { data: company, error: assignmentError } = await sb.from("work_order_assignments")
       .select("id").eq("work_order_id", workOrderId).eq("active", true)

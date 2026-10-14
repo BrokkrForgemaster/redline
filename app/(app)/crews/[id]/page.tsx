@@ -20,7 +20,7 @@ export default async function CrewDetailPage({
 
   const { data: crew } = await sb
     .from("crews")
-    .select("id, name, description, active, leader_id, created_at")
+    .select("id, name, description, active, leader_id, subcontractor_company_id, created_at")
     .eq("id", id)
     .single();
 
@@ -32,15 +32,27 @@ export default async function CrewDetailPage({
     .eq("crew_id", id)
     .order("joined_at");
 
-  const { data: allEmployees } = await supabase
+  const { data: allEmployees, error: employeesError } = await supabase
     .from("profiles")
     .select("id, first_name, last_name, role")
     .eq("status", "active")
-    .in("role", ["mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator"])
+    .in("role", crew.subcontractor_company_id
+      ? ["subcontractor"]
+      : ["mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator"])
     .order("last_name");
 
+  const { data: companyMembers, error: membershipError } = crew.subcontractor_company_id
+    ? await supabase.from("subcontractor_memberships")
+      .select("user_id")
+      .eq("subcontractor_company_id", crew.subcontractor_company_id)
+      .eq("active", true)
+    : { data: null, error: null };
+  if (employeesError || membershipError) return <p>Crew candidates could not be loaded. Refresh to retry.</p>;
+
   const memberIds = ((members ?? []) as { employee_id: string }[]).map(m => m.employee_id);
-  const nonMembers = (allEmployees ?? []).filter(e => !memberIds.includes(e.id));
+  const companyMemberIds = new Set((companyMembers ?? []).map(m => m.user_id));
+  const nonMembers = (allEmployees ?? []).filter(e => !memberIds.includes(e.id) &&
+    (!crew.subcontractor_company_id || companyMemberIds.has(e.id)));
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -60,6 +72,7 @@ export default async function CrewDetailPage({
         crew={crew}
         members={members ?? []}
         nonMembers={nonMembers ?? []}
+        subcontractorCrew={!!crew.subcontractor_company_id}
       />
     </div>
   );

@@ -7,7 +7,8 @@ vi.mock("@/lib/api/auth", () => ({ requireStaffUser }));
 vi.mock("./audit", () => ({ logAudit }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { updateCustomer } from "./customers";
+import { createCustomer, updateCustomer } from "./customers";
+import type { CustomerInput } from "../validations/customer";
 
 const id = "7faf9c16-c87b-4da3-bcee-40361b0d14c9";
 const input = {
@@ -42,5 +43,15 @@ describe("customer update boundary", () => {
     expect(await updateCustomer(id, input)).toHaveProperty("error");
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ primary_contact: "Ada Fields" }));
     expect(logAudit).not.toHaveBeenCalled();
+  });
+
+  it("persists a customer with empty optional fields and returns its id", async () => {
+    const single = vi.fn().mockResolvedValue({ data: { id }, error: null });
+    const select = vi.fn(() => ({ single }));
+    const insert = vi.fn(() => ({ select }));
+    from.mockReturnValue({ insert });
+    const result = await createCustomer({ ...input, mobilePhone: "", preferredContact: "" } as unknown as CustomerInput);
+    expect(result).toEqual({ id });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ mobile_phone: null, preferred_contact: null, created_by: id }));
   });
 });

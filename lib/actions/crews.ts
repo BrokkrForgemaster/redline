@@ -9,6 +9,7 @@ const createInput = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).optional(),
   leader_id: crewId.nullish(),
+  subcontractor_company_id: crewId.nullish(),
 }).strict();
 const updateInput = createInput.partial();
 
@@ -38,6 +39,7 @@ export async function createCrew(data: {
   name: string;
   description?: string;
   leader_id?: string;
+  subcontractor_company_id?: string;
 }) {
   const parsed = createInput.safeParse(data);
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Invalid crew" };

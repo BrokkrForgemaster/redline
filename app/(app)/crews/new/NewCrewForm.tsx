@@ -14,12 +14,16 @@ interface Employee {
   role: string;
 }
 
-export default function NewCrewForm({ employees }: { employees: Employee[] }) {
+export default function NewCrewForm({ employees, companies }: {
+  employees: Employee[];
+  companies: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [leaderId, setLeaderId] = useState("");
+  const [companyId, setCompanyId] = useState("");
 
   const fieldClass =
     "block w-full rounded-lg border border-border bg-white px-4 py-2.5 text-sm text-charcoal placeholder:text-muted focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors";
@@ -35,6 +39,7 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
         name,
         description,
         leader_id: leaderId || undefined,
+        subcontractor_company_id: companyId || undefined,
       });
       if ("id" in result && result.id) {
         toast.success("Crew created");
@@ -48,6 +53,14 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-charcoal mb-1">Crew company</label>
+          <select value={companyId} onChange={e => { setCompanyId(e.target.value); setLeaderId(""); }} className={fieldClass}>
+            <option value="">Redline crew</option>
+            {companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}
+          </select>
+          {companyId && <p className="mt-1 text-xs text-muted">Add active members of this company after creating the crew.</p>}
+        </div>
         <div>
           <label className="block text-sm font-medium text-charcoal mb-1">
             Crew Name <span className="text-redline">*</span>
@@ -66,7 +79,7 @@ export default function NewCrewForm({ employees }: { employees: Employee[] }) {
           <label className="block text-sm font-medium text-charcoal mb-1">
             Crew Leader
           </label>
-          <select
+          <select disabled={!!companyId}
             value={leaderId}
             onChange={e => setLeaderId(e.target.value)}
             className={fieldClass}

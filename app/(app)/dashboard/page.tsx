@@ -220,10 +220,10 @@ function OperationsDashboard({ data, role }: { data: Awaited<ReturnType<typeof l
         </div>
 
         <div className="grid gap-3 md:grid-cols-4">
-          <Metric label="Active Jobs" value={data.activeJobCount ?? "Unavailable"} icon={PlayCircle} />
-          <Metric label="Open Work Orders" value={data.openWorkOrderCount ?? "Unavailable"} icon={Briefcase} />
-          <Metric label="Active Crews" value={data.activeCrewCount} icon={Users} />
-          <Metric label="Active Staff" value={data.activeUserCount} icon={Users} />
+          <Metric label="Active Jobs" value={data.activeJobCount ?? "Unavailable"} icon={PlayCircle} href="/jobs?status=active" />
+          <Metric label="Open Work Orders" value={data.openWorkOrderCount ?? "Unavailable"} icon={Briefcase} href="/work-orders" />
+          <Metric label="Active Crews" value={data.activeCrewCount} icon={Users} href="/crews" />
+          <Metric label="Active Staff" value={data.activeUserCount} icon={Users} href="/employees" />
         </div>
         {data.totalsUnavailable && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-950/50 px-4 py-3 text-sm text-amber-100">
           Job totals are unavailable until the dashboard migration is applied. Preview lists are limited and are not totals.
@@ -353,14 +353,15 @@ function RowTitle({ number, title, customer, address, status }: { number: string
   );
 }
 
-function Metric({ label, value, icon: Icon }: { label: string; value: number | string; icon: React.ElementType }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+function Metric({ label, value, icon: Icon, href }: { label: string; value: number | string; icon: React.ElementType; href?: string }) {
+  const content = (
+    <div className={`rounded-xl border border-white/10 bg-white/5 p-4 ${href ? "transition-colors hover:border-redline focus-within:border-redline" : ""}`}>
       <Icon size={18} className="text-redline" />
       <p className="mt-3 text-3xl font-bold text-white">{value}</p>
       <p className="text-sm text-gray-400">{label}</p>
     </div>
   );
+  return href ? <Link href={href} className="block rounded-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-redline" aria-label={`View ${label}`}>{content}</Link> : content;
 }
 
 function Status({ status }: { status: string }) {

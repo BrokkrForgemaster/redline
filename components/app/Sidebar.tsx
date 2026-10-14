@@ -20,10 +20,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Search Work", href: "/search", icon: "⌕", roles: ["owner", "mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
   { label: "My Jobs", href: "/my-jobs", icon: "▣", roles: ["mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
   { label: "Jobs", href: "/jobs", icon: "▣", roles: ["owner"] },
+  { label: "Work Orders", href: "/work-orders", icon: "▣", roles: ["owner"] },
   { label: "Service Runs", href: "/service-runs", icon: "○", roles: ["owner"] },
   { label: "Customers", href: "/customers", icon: "◇", roles: ["owner"] },
   { label: "Properties", href: "/properties", icon: "◇", roles: ["owner"] },
   { label: "Crews", href: "/crews", icon: "◇", roles: ["owner"] },
+  { label: "Subcontractors", href: "/subcontractors", icon: "◇", roles: ["owner"] },
+  { label: "Time Tracking", href: "/time-tracking", icon: "◷", roles: ["owner", "mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
   { label: "Support", href: "/support", icon: "?", roles: ["owner", "developer"] },
   { label: "Settings", href: "/settings", icon: "⚙", roles: ["owner", "developer", "mowing_crew_lead", "mowing_crew_laborer", "snow_plow_operator", "subcontractor"] },
 ];

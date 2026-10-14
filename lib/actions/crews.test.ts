@@ -41,4 +41,12 @@ describe("crew action boundary", () => {
     const result = await createCrew({ name: "North crew", leader_id: workerId });
     expect(result).toEqual({ error: "Crew leader and membership are inconsistent" });
   });
+
+  it("passes company ownership when creating a subcontractor crew", async () => {
+    await createCrew({ name: "North Services crew", subcontractor_company_id: workerId });
+    expect(rpc).toHaveBeenCalledWith("apply_crew_change", {
+      p_action: "create", p_crew_id: null,
+      p_payload: { name: "North Services crew", subcontractor_company_id: workerId },
+    });
+  });
 });

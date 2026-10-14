@@ -15,13 +15,20 @@ export default async function NewCrewPage() {
     .eq("role", "mowing_crew_lead")
     .order("last_name");
 
+  const { data: companies, error: companiesError } = await supabase
+    .from("subcontractor_companies")
+    .select("id, name")
+    .eq("status", "active")
+    .order("name");
+  if (companiesError) return <p>Subcontractor companies could not be loaded. Refresh to retry.</p>;
+
   return (
     <div className="max-w-xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-charcoal">New Crew</h1>
         <p className="text-sm text-muted mt-1">Create a crew and assign a leader. Add members after saving.</p>
       </div>
-      <NewCrewForm employees={employees ?? []} />
+      <NewCrewForm employees={employees ?? []} companies={companies ?? []} />
     </div>
   );
 }
