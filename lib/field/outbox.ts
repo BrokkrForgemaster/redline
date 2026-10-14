@@ -3,8 +3,8 @@ import {
   openFieldDb,
   idbPut,
   idbDelete,
+  idbGet,
   idbGetAll,
-  idbCount,
   type PendingMutation,
   type PendingMedia,
 } from "./db";
@@ -42,13 +42,21 @@ function generateId(): string {
   return crypto.randomUUID();
 }
 
+async function currentUserId(): Promise<string> {
+  const { data: { session }, error } = await createClient().auth.getSession();
+  if (error || !session?.user) throw new Error("Sign in to access saved field work.");
+  return session.user.id;
+}
+
 export async function enqueueMutation(
   mutation: Omit<PendingMutation, "id" | "retry_count" | "last_error" | "next_retry_at">
 ): Promise<string> {
   const db = await openFieldDb();
+  const owner_user_id = await currentUserId();
   const id = generateId();
   const record: PendingMutation = {
     ...mutation,
+    owner_user_id,
     id,
     retry_count: 0,
     last_error: null,
@@ -60,7 +68,15 @@ export async function enqueueMutation(
 
 export async function pendingMutationCount(): Promise<number> {
   const db = await openFieldDb();
-  return idbCount(db, "pendingMutations");
+  const userId = await currentUserId();
+  return (await idbGetAll<PendingMutation>(db, "pendingMutations")).filter(m => m.owner_user_id === userId).length;
+}
+
+export async function isMutationPending(id: string): Promise<boolean> {
+  const db = await openFieldDb();
+  const userId = await currentUserId();
+  const item = await idbGet<PendingMutation>(db, "pendingMutations", id);
+  return item?.owner_user_id === userId;
 }
 
 export interface DrainResult {
@@ -70,12 +86,14 @@ export interface DrainResult {
 }
 
 export async function enqueuePendingMedia(
-  item: Omit<PendingMedia, "id" | "retry_count" | "last_error" | "next_retry_at">
+  item: Omit<PendingMedia, "id" | "retry_count" | "last_error" | "next_retry_at"> & { id?: string }
 ): Promise<string> {
   const db = await openFieldDb();
-  const id = generateId();
+  const owner_user_id = await currentUserId();
+  const id = item.id ?? generateId();
   const record: PendingMedia = {
     ...item,
+    owner_user_id,
     id,
     retry_count: 0,
     last_error: null,
@@ -87,15 +105,18 @@ export async function enqueuePendingMedia(
 
 export async function pendingMediaItemCount(): Promise<number> {
   const db = await openFieldDb();
-  return idbCount(db, "pendingMedia");
+  const userId = await currentUserId();
+  return (await idbGetAll<PendingMedia>(db, "pendingMedia")).filter(m => m.owner_user_id === userId).length;
 }
 
 export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResult> {
   const db = await openFieldDb();
   const all = await idbGetAll<PendingMedia>(db, "pendingMedia");
+  const userId = await currentUserId();
 
   const now = new Date().toISOString();
-  const ready = all.filter((m) => m.next_retry_at === null || m.next_retry_at <= now);
+  const ready = all.filter((m) => m.owner_user_id === userId && m.retry_count < MAX_RETRIES &&
+    (m.next_retry_at === null || m.next_retry_at <= now));
   const skipped = all.length - ready.length;
   let processed = 0;
   let failed = 0;
@@ -109,6 +130,7 @@ export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResu
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          asset_id: item.id,
           mime_type: item.mime_type,
           byte_size: item.byte_size,
           evidence_type: item.evidence_type,
@@ -118,15 +140,30 @@ export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResu
 
       if (!presignRes.ok) {
         // 409 finalized — discard permanently
-        if (presignRes.status === 409 || presignRes.status === 403 || presignRes.status === 404) {
-          await idbDelete(db, "pendingMedia", item.id);
-          failed++;
-          continue;
-        }
         throw new Error(`Presign HTTP ${presignRes.status}`);
       }
 
       const { asset_id, bucket, path, token } = await presignRes.json();
+      if (asset_id !== item.id) throw new Error("Photo ID was not confirmed by the server.");
+
+      const completeUrl = `/api/v1/service-runs/${item.service_run_id}/media/${asset_id}/complete`;
+      const reconcileRes = await fetch(completeUrl, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: "{}", signal,
+      });
+      if (reconcileRes.ok) {
+        const reconciled = await reconcileRes.json();
+        if (reconciled?.asset?.id !== asset_id || reconciled.asset.status !== "attached") {
+          throw new Error("Previously uploaded photo was not verified.");
+        }
+        await idbDelete(db, "pendingMedia", item.id);
+        processed++;
+        continue;
+      }
+      const reconcileError = await reconcileRes.json().catch(() => ({}));
+      if (reconcileRes.status !== 409 || reconcileError.code !== "VALIDATION_ERROR") {
+        throw new Error(`Photo reconciliation ${reconcileRes.status}: ${reconcileError.code ?? "UNKNOWN"}`);
+      }
+      if (!bucket || !path || !token) throw new Error("Upload permission was not returned.");
 
       // Step 2: upload blob to Storage via the Supabase JS client
       const supabase = createClient();
@@ -139,7 +176,7 @@ export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResu
 
       // Step 3: complete
       const completeRes = await fetch(
-        `/api/v1/service-runs/${item.service_run_id}/media/${asset_id}/complete`,
+        completeUrl,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -148,8 +185,13 @@ export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResu
         }
       );
 
-      if (!completeRes.ok && completeRes.status !== 404) {
+      if (!completeRes.ok) {
         throw new Error(`Complete HTTP ${completeRes.status}`);
+      }
+
+      const completion = await completeRes.json();
+      if (completion?.asset?.id !== asset_id || completion.asset.status !== "attached") {
+        throw new Error("Media completion was not confirmed by the server.");
       }
 
       await idbDelete(db, "pendingMedia", item.id);
@@ -158,17 +200,11 @@ export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResu
       if (signal?.aborted) break;
 
       const newRetryCount = item.retry_count + 1;
-      if (newRetryCount >= MAX_RETRIES) {
-        await idbDelete(db, "pendingMedia", item.id);
-        failed++;
-        continue;
-      }
-
       const updated: PendingMedia = {
         ...item,
         retry_count: newRetryCount,
         last_error: err instanceof Error ? err.message : String(err),
-        next_retry_at: new Date(Date.now() + backoffMs(newRetryCount)).toISOString(),
+        next_retry_at: newRetryCount >= MAX_RETRIES ? null : new Date(Date.now() + backoffMs(newRetryCount)).toISOString(),
       };
       await idbPut(db, "pendingMedia", updated);
       failed++;
@@ -181,10 +217,16 @@ export async function drainPendingMedia(signal?: AbortSignal): Promise<DrainResu
 export async function drainOutbox(signal?: AbortSignal): Promise<DrainResult> {
   const db = await openFieldDb();
   const all = await idbGetAll<PendingMutation>(db, "pendingMutations");
+  const media = await idbGetAll<PendingMedia>(db, "pendingMedia");
+  const userId = await currentUserId();
+  const unresolvedMutationIds = new Set(all.map((item) => item.id));
+  const unresolvedMediaRuns = new Set(media.filter((item) => item.owner_user_id === userId)
+    .map((item) => item.service_run_id));
 
   const now = new Date().toISOString();
   const ready = all
-    .filter((m) => m.next_retry_at === null || m.next_retry_at <= now)
+    .filter((m) => m.owner_user_id === userId && m.retry_count < MAX_RETRIES &&
+      (m.next_retry_at === null || m.next_retry_at <= now))
     .sort((a, b) => {
       const pa = actionPriority(a.action);
       const pb = actionPriority(b.action);
@@ -192,7 +234,7 @@ export async function drainOutbox(signal?: AbortSignal): Promise<DrainResult> {
       return a.queued_at < b.queued_at ? -1 : 1;
     });
 
-  const skipped = all.length - ready.length;
+  let skipped = all.length - ready.length;
   let processed = 0;
   let failed = 0;
 
@@ -200,11 +242,11 @@ export async function drainOutbox(signal?: AbortSignal): Promise<DrainResult> {
     if (signal?.aborted) break;
 
     // Block on unresolved dependencies
-    const blocked = mutation.dependency_ids.some((depId) =>
-      all.some((m) => m.id === depId)
-    );
+    const blocked = mutation.dependency_ids.some((depId) => unresolvedMutationIds.has(depId)) ||
+      (mutation.action === "service-runs:finish" &&
+        unresolvedMediaRuns.has(mutation.url.match(/service-runs\/([^/]+)\/finish/)?.[1] ?? ""));
     if (blocked) {
-      skipped + 1; // dependency not yet cleared
+      skipped += 1;
       continue;
     }
 
@@ -228,36 +270,35 @@ export async function drainOutbox(signal?: AbortSignal): Promise<DrainResult> {
           json !== null &&
           (json as Record<string, unknown>).code === "ALREADY_PROCESSED";
 
-        if (res.ok || isIdempotentReplay) {
+        const result = json as Record<string, unknown>;
+        const visit = result?.service_run as { id?: string; status?: string } | undefined;
+        const expectedRunId = mutation.action === "service-runs:finish"
+          ? mutation.url.match(/service-runs\/([^/]+)\/finish/)?.[1]
+          : (mutation.body as { service_run_id?: string } | null)?.service_run_id;
+        const visitConfirmed = mutation.action === "service-runs:finish"
+          ? visit?.id === expectedRunId && visit?.status === "completed"
+          : mutation.action === "work-orders:start"
+            ? visit?.id === expectedRunId && visit?.status === "in_progress"
+            : true;
+        if (((res.ok && json && typeof json === "object" && !result.error && visitConfirmed) || isIdempotentReplay)) {
           await idbDelete(db, "pendingMutations", mutation.id);
+          unresolvedMutationIds.delete(mutation.id);
           processed++;
           continue;
         }
       }
 
       // Terminal errors: auth, not found, state conflict that isn't idempotent replay
-      if (res.status === 401 || res.status === 403 || res.status === 404) {
-        await idbDelete(db, "pendingMutations", mutation.id);
-        failed++;
-        continue;
-      }
-
       throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       if (signal?.aborted) break;
 
       const newRetryCount = mutation.retry_count + 1;
-      if (newRetryCount >= MAX_RETRIES) {
-        await idbDelete(db, "pendingMutations", mutation.id);
-        failed++;
-        continue;
-      }
-
       const updated: PendingMutation = {
         ...mutation,
         retry_count: newRetryCount,
         last_error: err instanceof Error ? err.message : String(err),
-        next_retry_at: new Date(Date.now() + backoffMs(newRetryCount)).toISOString(),
+        next_retry_at: newRetryCount >= MAX_RETRIES ? null : new Date(Date.now() + backoffMs(newRetryCount)).toISOString(),
       };
       await idbPut(db, "pendingMutations", updated);
       failed++;

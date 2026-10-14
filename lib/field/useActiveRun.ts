@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   saveActiveRun,
   loadActiveRunForWorkOrder,
@@ -38,6 +38,9 @@ const EMPTY: ActiveRunState = {
 
 export function useActiveRun(workOrderId: string): UseActiveRunResult {
   const [run, setRun] = useState<ActiveRunState>(EMPTY);
+  const stateRef = useRef<ActiveRunState>(EMPTY);
+  const writeQueue = useRef<Promise<void>>(Promise.resolve());
+  const localRevision = useRef(0);
 
   // Step 1: load from IndexedDB immediately (instant, no spinner)
   useEffect(() => {
@@ -46,7 +49,8 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
       .then((stored) => {
         if (cancelled) return;
         if (stored) {
-          setRun({
+          if (localRevision.current > 0) return;
+          const loaded = {
             serviceRunId: stored.serviceRunId,
             status: stored.status,
             startedAt: stored.startedAt,
@@ -55,7 +59,9 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
             beforeCount: stored.beforeCount ?? 0,
             afterCount: stored.afterCount ?? 0,
             hydrated: false,
-          });
+          };
+          stateRef.current = loaded;
+          setRun(loaded);
         }
       })
       .catch(() => {});
@@ -69,19 +75,30 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
       id: string;
       work_order_id: string;
       status: string;
-      started_at: string;
+      started_at: string | null;
       finished_at: string | null;
       submitted_at: string | null;
     }
 
     let cancelled = false;
+    const revisionAtStart = localRevision.current;
 
     async function hydrate() {
       try {
         const r = await fetch(`/api/v1/service-runs/active?work_order_id=${workOrderId}`);
         if (cancelled) return;
+        if (!r.ok) throw new Error(`Active work HTTP ${r.status}`);
         const json = await r.json();
         const runs: ApiServiceRun[] = json?.service_runs ?? [];
+        if (runs.length === 0) {
+          const prepared = await fetch(`/api/v1/work-orders/${workOrderId}/prepare`, { method: "POST" });
+          if (!prepared.ok) throw new Error(`Prepare visit HTTP ${prepared.status}`);
+          const preparedJson = await prepared.json();
+          if (preparedJson?.service_run) runs.push({
+            ...preparedJson.service_run,
+            work_order_id: workOrderId,
+          });
+        }
 
         if (runs.length > 0) {
           const sr = runs[0];
@@ -101,7 +118,8 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
           }
 
           if (cancelled) return;
-          setRun({
+          if (localRevision.current !== revisionAtStart) return;
+          const confirmed = {
             serviceRunId: sr.id,
             status: sr.status,
             startedAt: sr.started_at,
@@ -110,8 +128,8 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
             beforeCount,
             afterCount,
             hydrated: true,
-          });
-          saveActiveRun({
+          };
+          await saveActiveRun({
             serviceRunId: sr.id,
             workOrderId,
             status: sr.status,
@@ -120,7 +138,10 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
             submittedAt: sr.submitted_at,
             beforeCount,
             afterCount,
-          }).catch(() => {});
+          });
+          if (cancelled || localRevision.current !== revisionAtStart) return;
+          stateRef.current = confirmed;
+          setRun(confirmed);
         } else {
           if (!cancelled) setRun((prev) => ({ ...prev, hydrated: true }));
         }
@@ -136,7 +157,8 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
 
   const updateRun = useCallback(
     async (patch: Partial<Omit<StoredActiveRun, "workOrderId" | "savedAt">>) => {
-      setRun((prev) => {
+      const write = async () => {
+        const prev = stateRef.current;
         const next: ActiveRunState = {
           ...prev,
           ...(patch.serviceRunId !== undefined ? { serviceRunId: patch.serviceRunId } : {}),
@@ -150,29 +172,35 @@ export function useActiveRun(workOrderId: string): UseActiveRunResult {
         };
 
         if (next.serviceRunId) {
-          saveActiveRun({
+          await saveActiveRun({
             serviceRunId: next.serviceRunId,
             workOrderId,
             status: next.status ?? "in_progress",
-            startedAt: next.startedAt ?? new Date().toISOString(),
+            startedAt: next.startedAt,
             finishedAt: next.finishedAt ?? null,
             submittedAt: next.submittedAt ?? null,
             beforeCount: next.beforeCount,
             afterCount: next.afterCount,
-          }).catch(() => {});
+          });
         }
-
-        return next;
-      });
+        localRevision.current++;
+        stateRef.current = next;
+        setRun(next);
+      };
+      const pending = writeQueue.current.then(write, write);
+      writeQueue.current = pending.catch(() => {});
+      await pending;
     },
     [workOrderId]
   );
 
   const clearRun = useCallback(async () => {
     if (run.serviceRunId) {
-      await clearActiveRun(run.serviceRunId).catch(() => {});
+      await clearActiveRun(run.serviceRunId);
     }
-    setRun({ ...EMPTY, hydrated: true });
+    localRevision.current++;
+    stateRef.current = { ...EMPTY, hydrated: true };
+    setRun(stateRef.current);
   }, [run.serviceRunId]);
 
   return { run, updateRun, clearRun };

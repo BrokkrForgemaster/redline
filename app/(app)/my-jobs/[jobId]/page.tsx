@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import FieldJobView from "./FieldJobView";
+import JobsLiveRefresh from "@/components/app/JobsLiveRefresh";
 
 export default async function FieldJobPage({
   params,
@@ -20,14 +21,19 @@ export default async function FieldJobPage({
     .from("jobs")
     .select(`
       id, job_number, title, service_type, status,
-      scheduled_start, work_instructions, access_notes,
-      customers(first_name, last_name, business_name),
+      scheduled_start, actual_start, actual_end, work_instructions, access_notes,
+      customers(business_name),
       properties(address_line1, city, state)
     `)
     .eq("id", jobId)
     .single();
 
   if (!job) notFound();
+  const { data: businessName, error: businessError } = await sb.rpc("assigned_legacy_business_name", {
+    p_job_id: jobId,
+  });
+  if (businessError || typeof businessName !== "string") notFound();
+  job.customers = { business_name: businessName };
 
   // Active (open) time entry for this employee on this job
   const { data: activeEntry } = await sb
@@ -61,13 +67,16 @@ export default async function FieldJobPage({
   ]);
 
   return (
-    <FieldJobView
-      job={job}
-      activeEntry={activeEntry ?? null}
-      completedEntry={completedEntry ?? null}
-      beforeCount={beforeCount ?? 0}
-      afterCount={afterCount ?? 0}
-      locationTagged={!!manualLocationTagCount}
-    />
+    <>
+      <JobsLiveRefresh />
+      <FieldJobView
+        job={job}
+        activeEntry={activeEntry ?? null}
+        completedEntry={completedEntry ?? null}
+        beforeCount={beforeCount ?? 0}
+        afterCount={afterCount ?? 0}
+        locationTagged={!!manualLocationTagCount}
+      />
+    </>
   );
 }

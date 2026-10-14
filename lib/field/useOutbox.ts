@@ -23,7 +23,7 @@ export interface OutboxState {
 export interface UseOutboxResult extends OutboxState {
   drain: () => Promise<void>;
   enqueue: (mutation: Omit<PendingMutation, "id" | "retry_count" | "last_error" | "next_retry_at">) => Promise<string>;
-  enqueueMedia: (item: Omit<PendingMedia, "id" | "retry_count" | "last_error" | "next_retry_at">) => Promise<string>;
+  enqueueMedia: (item: Omit<PendingMedia, "id" | "retry_count" | "last_error" | "next_retry_at"> & { id?: string }) => Promise<string>;
 }
 
 export function useOutbox(): UseOutboxResult {
@@ -62,10 +62,8 @@ export function useOutbox(): UseOutboxResult {
 
     try {
       // Drain media first (priority 3) so photos are uploaded before submit (priority 5)
-      const [mediaResult, mutResult] = await Promise.all([
-        drainPendingMedia(controller.signal),
-        drainOutbox(controller.signal),
-      ]);
+      const mediaResult = await drainPendingMedia(controller.signal);
+      const mutResult = await drainOutbox(controller.signal);
 
       const [count, mediaCount] = await Promise.all([
         pendingMutationCount(),
@@ -98,7 +96,7 @@ export function useOutbox(): UseOutboxResult {
   );
 
   const enqueueMedia = useCallback(
-    async (item: Omit<PendingMedia, "id" | "retry_count" | "last_error" | "next_retry_at">) => {
+    async (item: Omit<PendingMedia, "id" | "retry_count" | "last_error" | "next_retry_at"> & { id?: string }) => {
       const id = await enqueuePendingMedia(item);
       await refreshCounts();
       return id;
@@ -107,7 +105,8 @@ export function useOutbox(): UseOutboxResult {
   );
 
   useEffect(() => {
-    refreshCounts();
+    const timer = window.setTimeout(() => void refreshCounts(), 0);
+    return () => window.clearTimeout(timer);
   }, [refreshCounts]);
 
   useEffect(() => {
@@ -116,9 +115,9 @@ export function useOutbox(): UseOutboxResult {
   }, [drain]);
 
   useEffect(() => {
-    drain();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = window.setTimeout(() => void drain(), 0);
+    return () => window.clearTimeout(timer);
+  }, [drain]);
 
   return { ...state, drain, enqueue, enqueueMedia };
 }

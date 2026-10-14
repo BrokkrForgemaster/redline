@@ -34,18 +34,21 @@ interface NotificationQueryClient {
       eq(column: string, value: string | boolean): {
         eq(column: string, value: string | boolean): {
           order(column: string, options: { ascending: boolean }): {
-            limit(count: number): Promise<{ data: NotificationItem[] | null; count: number | null }>;
+            limit(count: number): Promise<{ data: NotificationItem[] | null; count: number | null; error: { message: string } | null }>;
           };
         };
         order(column: string, options: { ascending: boolean }): {
-          limit(count: number): Promise<{ data: NotificationItem[] | null; count: number | null }>;
+          limit(count: number): Promise<{ data: NotificationItem[] | null; count: number | null; error: { message: string } | null }>;
         };
       };
     };
     update(values: Record<string, unknown>): {
       eq(column: string, value: string | boolean): {
-        eq(column: string, value: string | boolean): Promise<unknown>;
-      } & Promise<unknown>;
+        eq(column: string, value: string | boolean): {
+          select(columns: string): Promise<{ data: { id: string }[] | null; error: { message: string } | null }>;
+        };
+        select(columns: string): Promise<{ data: { id: string }[] | null; error: { message: string } | null }>;
+      };
     };
   };
 }
@@ -57,9 +60,12 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   const [isOnline, setIsOnline] = useState(true);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [alertError, setAlertError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const notificationsRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<AudioContext | null>(null);
+  const seenAlertIds = useRef(new Set<string>());
+  const alertRevision = useRef(0);
   const displayName = getProfileDisplayName(profile);
   const initials = getProfileInitials(profile);
 
@@ -86,6 +92,18 @@ export default function TopBar({ profile, onMenuClick }: Props) {
       oscillator.stop(ctx.currentTime + 0.35);
     } catch {
       // Browser autoplay/audio policy can block this until the first user gesture.
+    }
+  }
+
+  function primeAlertAudio() {
+    try {
+      const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioContextCtor) return;
+      const ctx = audioRef.current ?? new AudioContextCtor();
+      audioRef.current = ctx;
+      if (ctx.state === "suspended") void ctx.resume();
+    } catch {
+      // Audio is optional; the persisted inbox remains the source of truth.
     }
   }
 
@@ -131,9 +149,13 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   useEffect(() => {
     const supabase = createClient();
     let latestSeenCreatedAt: string | null = null;
+    let requestSequence = 0;
+    let active = true;
 
     async function loadUnread(showToastForNew = false) {
-      const { data, count } = await (supabase as unknown as NotificationQueryClient)
+      const sequence = ++requestSequence;
+      const revision = alertRevision.current;
+      const { data, count, error } = await (supabase as unknown as NotificationQueryClient)
         .from("notifications")
         .select("id, title, body, action_url, created_at, read", { count: "exact" })
         .eq("user_id", profile.id)
@@ -141,8 +163,16 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         .order("created_at", { ascending: false })
         .limit(10);
 
+      if (!active || sequence !== requestSequence || revision !== alertRevision.current) return;
+      if (error) {
+        setAlertError("Alerts could not be refreshed. Retry when connected.");
+        return;
+      }
+      setAlertError(null);
+
       setUnreadCount(count ?? 0);
       setNotifications((data ?? []) as NotificationItem[]);
+      for (const item of data ?? []) seenAlertIds.current.add(item.id);
 
       const newest = data?.[0] as { title: string; body: string; created_at: string } | undefined;
       if (!newest) return;
@@ -169,9 +199,12 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${profile.id}` },
         (payload) => {
           const next = payload.new as NotificationItem;
+          if (!next.id || next.read || seenAlertIds.current.has(next.id)) return;
+          seenAlertIds.current.add(next.id);
+          requestSequence++;
           if (next.created_at) latestSeenCreatedAt = next.created_at;
           setUnreadCount((count) => count + 1);
-          setNotifications((items) => [next, ...items].slice(0, 10));
+          setNotifications((items) => [next, ...items.filter((item) => item.id !== next.id)].slice(0, 10));
           playAlertTone();
           showSystemNotification(next);
           toast.info(next.title ?? "New alert", { description: next.body });
@@ -181,6 +214,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
       .subscribe();
 
     return () => {
+      active = false;
       window.clearInterval(interval);
       supabase.removeChannel(channel);
     };
@@ -202,11 +236,18 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   async function handleNotificationClick(notification: NotificationItem) {
     const supabase = createClient();
     if (!notification.read) {
-      await (supabase as unknown as NotificationQueryClient)
+      const { data, error } = await (supabase as unknown as NotificationQueryClient)
         .from("notifications")
         .update({ read: true, read_at: new Date().toISOString() })
         .eq("id", notification.id)
-        .eq("user_id", profile.id);
+        .eq("user_id", profile.id)
+        .select("id");
+      if (error || !data?.some((row) => row.id === notification.id)) {
+        setAlertError("Alert was not marked read. Retry from the alert list.");
+        return;
+      }
+      alertRevision.current++;
+      setAlertError(null);
       setNotifications((items) => items.filter((item) => item.id !== notification.id));
       setUnreadCount((count) => Math.max(0, count - 1));
     }
@@ -216,13 +257,21 @@ export default function TopBar({ profile, onMenuClick }: Props) {
 
   async function markAllRead() {
     const supabase = createClient();
-    await (supabase as unknown as NotificationQueryClient)
+    const { data, error } = await (supabase as unknown as NotificationQueryClient)
       .from("notifications")
       .update({ read: true, read_at: new Date().toISOString() })
       .eq("user_id", profile.id)
-      .eq("read", false);
-    setNotifications([]);
-    setUnreadCount(0);
+      .eq("read", false)
+      .select("id");
+    if (error || (unreadCount > 0 && !data?.length)) {
+      setAlertError("Alerts were not marked read. Retry when connected.");
+      return;
+    }
+    alertRevision.current++;
+    setAlertError(null);
+    const readIds = new Set((data ?? []).map((row) => row.id));
+    setNotifications((items) => items.filter((item) => !readIds.has(item.id)));
+    setUnreadCount((count) => Math.max(0, count - readIds.size));
   }
 
   async function handleSignOut() {
@@ -231,7 +280,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
     // Clear any PWA caches on logout
     if ("caches" in window) {
       const cacheNames = await caches.keys();
-      await Promise.all(cacheNames.filter(n => n.includes("redline-app")).map(n => caches.delete(n)));
+      await Promise.all(cacheNames.filter(n => n.startsWith("redline-pages") || n.includes("redline-app")).map(n => caches.delete(n)));
     }
     router.push("/login");
     router.refresh();
@@ -248,17 +297,20 @@ export default function TopBar({ profile, onMenuClick }: Props) {
         <Menu size={20} />
       </button>
 
-      {/* Search */}
-      <div className="flex-1 max-w-xl hidden sm:block">
+      {/* Scoped work search */}
+      <form action="/search" className="flex-1 max-w-xl hidden sm:block">
         <div className="relative">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="search"
-            placeholder="Search customers, jobs, invoices…"
+            name="q"
+            maxLength={100}
+            aria-label="Search assigned work"
+            placeholder="Search work orders…"
             className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:border-redline focus:ring-2 focus:ring-redline/20 outline-none transition-colors"
           />
         </div>
-      </div>
+      </form>
 
       <div className="ml-auto flex items-center gap-2">
         {/* Online status */}
@@ -276,7 +328,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
             type="button"
             onClick={() => {
               setNotificationsOpen((open) => !open);
-              if (!audioRef.current) playAlertTone();
+              primeAlertAudio();
             }}
             className="relative p-2 rounded-md text-gray-500 hover:bg-gray-100 transition-colors"
             aria-label="Notifications"
@@ -308,6 +360,8 @@ export default function TopBar({ profile, onMenuClick }: Props) {
                   </button>
                 )}
               </div>
+
+              {alertError && <p role="alert" className="px-4 py-2 text-xs text-red-700">{alertError}</p>}
 
               <div className="max-h-96 overflow-y-auto">
                 {notifications.length === 0 ? (

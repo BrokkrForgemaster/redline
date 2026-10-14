@@ -1,21 +1,30 @@
 import { requireApiUser } from "@/lib/api/auth";
-import { apiOk } from "@/lib/api/errors";
+import { apiError, apiOk } from "@/lib/api/errors";
 import { createAdminClient } from "@/lib/supabase/server";
-
-async function getCrewIds(sb: any, userId: string) {
-  const { data } = await sb.from("crew_members").select("crew_id").eq("employee_id", userId);
-  return ((data ?? []) as { crew_id: string }[]).map((row) => row.crew_id);
-}
+import { isOperationalRole } from "@/lib/auth/roles";
+import { loadAssignmentScope } from "@/lib/api/assignment-scope";
 
 export async function GET() {
   const auth = await requireApiUser();
   if (!auth.ok) return auth.response;
+  const { data: profile, error: profileError } = await createAdminClient().from("profiles")
+    .select("role, status").eq("id", auth.user.id).single();
+  if (profileError || profile?.status !== "active" || !isOperationalRole(profile.role)) {
+    return apiError(403, "FORBIDDEN", "Operational access is not granted.");
+  }
 
   // Assignment aggregation crosses RLS-protected tables. The route is still
   // scoped to auth.user.id, but uses service role so crew members can see their
   // own assignments without broad client-side table access.
-  const sb = createAdminClient() as any;
-  const crewIds = await getCrewIds(sb, auth.user.id);
+  const sb = createAdminClient();
+  let scope: Awaited<ReturnType<typeof loadAssignmentScope>>;
+  try { scope = await loadAssignmentScope(sb, auth.user.id, profile.role); }
+  catch { return apiError(500, "INTERNAL_ERROR", "Could not load assignments."); }
+  const assignmentFilters = [
+    `employee_id.eq.${auth.user.id}`,
+    ...(scope.visibleCrewIds.length ? [`crew_id.in.(${scope.visibleCrewIds.join(",")})`] : []),
+    ...(scope.companyIds.length ? [`subcontractor_company_id.in.(${scope.companyIds.join(",")})`] : []),
+  ];
 
   const { data: workOrderAssignments, error: workOrderError } = await sb
     .from("work_order_assignments")
@@ -31,7 +40,7 @@ export async function GET() {
         scheduled_end,
         timezone,
         instructions,
-        customers(id, first_name, last_name, business_name),
+        customers(business_name),
         properties(
           id,
           property_name,
@@ -50,7 +59,7 @@ export async function GET() {
       )
     `)
     .eq("active", true)
-    .or(`employee_id.eq.${auth.user.id}${crewIds.length ? `,crew_id.in.(${crewIds.join(",")})` : ""}`);
+    .or(assignmentFilters.join(","));
 
   let legacyJobs: unknown[] = [];
 
@@ -58,6 +67,7 @@ export async function GET() {
     .from("job_assignments")
     .select("job_id")
     .eq("employee_id", auth.user.id);
+  if (directJobIdsResult.error) return apiError(500, "INTERNAL_ERROR", "Could not verify direct assignments.");
 
   const directJobIds = ((directJobIdsResult.data ?? []) as { job_id: string }[]).map(
     (row) => row.job_id
@@ -65,11 +75,11 @@ export async function GET() {
 
   const legacyOrFilters = [
     directJobIds.length ? `id.in.(${directJobIds.join(",")})` : null,
-    crewIds.length ? `crew_id.in.(${crewIds.join(",")})` : null,
+    scope.visibleCrewIds.length ? `crew_id.in.(${scope.visibleCrewIds.join(",")})` : null,
   ].filter(Boolean);
 
   if (legacyOrFilters.length > 0) {
-    const { data } = await sb
+    const { data, error } = await sb
       .from("jobs")
       .select(`
         id,
@@ -81,21 +91,23 @@ export async function GET() {
         scheduled_end,
         work_instructions,
         access_notes,
-        customers(id, first_name, last_name, business_name),
+        customers(business_name),
         properties(id, property_name, address_line1, city, state, zip, latitude, longitude, access_instructions)
       `)
       .or(legacyOrFilters.join(","))
-      .not("status", "in", "(cancelled,archived,completed)")
+      .not("status", "in", "(cancelled,archived)")
       .order("scheduled_start", { ascending: true, nullsFirst: false });
-
+    if (error) return apiError(500, "INTERNAL_ERROR", "Could not load assigned jobs.");
     legacyJobs = data ?? [];
   }
 
-  return apiOk({
+  const response = apiOk({
     assignments: workOrderError ? [] : workOrderAssignments ?? [],
     legacy_jobs: legacyJobs,
     warnings: workOrderError
       ? ["New work-order tables are unavailable; returning legacy job assignments only."]
       : [],
   });
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
 }

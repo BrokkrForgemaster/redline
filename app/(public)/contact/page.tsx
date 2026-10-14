@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 export default function ContactPage() {
   const [status, setStatus] = useState<
     "idle" | "sending" | "success" | "error"
   >("idle");
   const [errorMsg, setErrorMsg] = useState("");
+  const lastSubmission = useRef<{ payload: string; id: string } | null>(null);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -21,37 +22,25 @@ export default function ContactPage() {
       service: (form.elements.namedItem("service") as HTMLSelectElement).value,
       message: (form.elements.namedItem("message") as HTMLTextAreaElement)
         .value,
+      companyWebsite: (form.elements.namedItem("companyWebsite") as HTMLInputElement).value,
     };
+    const payload = JSON.stringify(data);
+    if (!lastSubmission.current || lastSubmission.current.payload !== payload) {
+      lastSubmission.current = { payload, id: crypto.randomUUID() };
+    }
 
     try {
-      const res = await fetch(
-        "https://formsubmit.co/ajax/68190640042aaa02c784ee90860d79a7",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            name: data.name,
-            email: data.email,
-            phone: data.phone || "Not provided",
-            service: data.service || "Not specified",
-            message: data.message,
-            _subject: `New Quote Request — ${data.service || "General"} — ${data.name}`,
-            _replyto: data.email,
-            _template: "table",
-          }),
-        }
-      );
-
-      const json = await res.json().catch(() => null);
-      if (!res.ok || json?.success === "false") {
-        throw new Error("Failed to send message.");
-      }
+      const res = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...data, submissionId: lastSubmission.current.id }),
+      });
+      const json = await res.json().catch(() => null) as { saved?: boolean; error?: string } | null;
+      if (!res.ok || !json?.saved) throw new Error(json?.error ?? "Could not save your request.");
 
       setStatus("success");
       form.reset();
+      lastSubmission.current = null;
     } catch (err) {
       setStatus("error");
       setErrorMsg(
@@ -72,7 +61,7 @@ export default function ContactPage() {
           </h1>
           <p className="mt-4 text-lg text-muted max-w-2xl mx-auto leading-relaxed">
             Have a question or ready to get started? Fill out the form below and
-            we&apos;ll get back to you within 24 hours.
+            we&apos;ll follow up after your request is received.
           </p>
         </div>
       </section>
@@ -89,11 +78,11 @@ export default function ContactPage() {
             {status === "success" ? (
               <div className="mt-8 bg-lawn/10 border border-lawn/30 rounded-lg p-6">
                 <h3 className="text-xl font-semibold text-lawn">
-                  Message Sent!
+                  Request saved
                 </h3>
                 <p className="mt-2 text-charcoal leading-relaxed">
-                  Thanks for reaching out. We&apos;ll get back to you within 24
-                  hours. If you need us sooner, call{" "}
+                  Your quote inquiry is saved. Notification delivery is pending.
+                  If you need us sooner, call{" "}
                   <a
                     href="tel:+16064250891"
                     className="font-semibold text-redline hover:underline"
@@ -111,6 +100,10 @@ export default function ContactPage() {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="mt-8 space-y-6">
+                <div className="absolute -left-[10000px]" aria-hidden="true">
+                  <label htmlFor="companyWebsite">Website</label>
+                  <input id="companyWebsite" name="companyWebsite" tabIndex={-1} autoComplete="off" />
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div>
                     <label

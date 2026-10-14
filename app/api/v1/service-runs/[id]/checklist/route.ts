@@ -2,12 +2,8 @@ import { requireApiUser } from "@/lib/api/auth";
 import { requireServiceRunAccess } from "@/lib/api/service-access";
 import { beginIdempotentRequest, completeIdempotentRequest } from "@/lib/api/idempotency";
 import { apiError, apiOk } from "@/lib/api/errors";
-
-interface ChecklistResponseItem {
-  checklist_item_id: string;
-  completed: boolean;
-  response_value?: Record<string, unknown>;
-}
+import { createAdminClient } from "@/lib/supabase/server";
+import { validateChecklistSubmission, type ChecklistSubmission, type ChecklistItemRule } from "@/lib/policies/checklist";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireApiUser();
@@ -28,13 +24,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const idem = await beginIdempotentRequest(auth.supabase, auth.user.id, `service-runs:${id}:checklist`, idempotencyKey, body);
   if (!idem.ok) return idem.response;
 
-  const responses: ChecklistResponseItem[] = Array.isArray(body.responses) ? body.responses : [];
+  const responses: ChecklistSubmission[] = Array.isArray(body.responses) ? body.responses : [];
   if (!responses.length) {
     return apiError(400, "VALIDATION_ERROR", "responses array is required and must not be empty.");
   }
+  if (responses.length > 100 || responses.some(item =>
+    typeof item?.checklist_item_id !== "string" || !/^[0-9a-f-]{36}$/i.test(item.checklist_item_id))) {
+    return apiError(400, "VALIDATION_ERROR", "Invalid checklist item IDs.");
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sb = auth.supabase as any;
+  const sb = createAdminClient() as any;
+  if (!serviceRun.template_version_id) {
+    return apiError(400, "VALIDATION_ERROR", "This visit has no frozen checklist template.");
+  }
+  const { data: items, error: templateError } = await sb.from("checklist_items")
+    .select("id, response_type, options, checklist_sections!inner(template_version_id)")
+    .eq("checklist_sections.template_version_id", serviceRun.template_version_id)
+    .in("id", responses.map(item => item.checklist_item_id));
+  if (templateError) return apiError(500, "INTERNAL_ERROR", "Could not verify checklist template.");
+  const validationError = validateChecklistSubmission(responses, (items ?? []) as ChecklistItemRule[]);
+  if (validationError) return apiError(400, "VALIDATION_ERROR", validationError);
+  const photoIds = responses.flatMap(response =>
+    typeof response.response_value?.asset_id === "string" ? [response.response_value.asset_id] : []
+  );
+  if (photoIds.length) {
+    const { data: photos, error: photoError } = await sb.from("media_assets")
+      .select("id").eq("service_run_id", id).eq("status", "attached").in("id", photoIds);
+    if (photoError || new Set((photos ?? []).map((photo: { id: string }) => photo.id)).size !== new Set(photoIds).size) {
+      return apiError(400, "VALIDATION_ERROR", "Checklist photo must be attached to this visit.");
+    }
+  }
   const now = new Date().toISOString();
 
   const rows = responses.map((r) => ({

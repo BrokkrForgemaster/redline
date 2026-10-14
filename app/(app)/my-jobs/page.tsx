@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense, useSyncExternalStore } from "react";
+import { useSearchParams } from "next/navigation";
 import { Briefcase, MapPin, Clock, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { useAssignments } from "@/lib/field/useAssignments";
 import { useOutbox } from "@/lib/field/useOutbox";
@@ -19,18 +21,44 @@ const SERVICE_LABELS: Record<string, string> = {
   other: "General Service",
 };
 
+function subscribeToCalendar(notify: () => void) {
+  const timer = window.setInterval(notify, 60_000);
+  window.addEventListener("focus", notify);
+  return () => {
+    window.clearInterval(timer);
+    window.removeEventListener("focus", notify);
+  };
+}
+
+function currentLocalDay() {
+  return new Date().toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric",
+  });
+}
+
+function serverDayPlaceholder() { return "Today"; }
+
 export default function MyJobsPage() {
+  return <Suspense fallback={<p className="p-4 text-sm">Loading assigned work…</p>}><MyJobsContent /></Suspense>;
+}
+
+function MyJobsContent() {
+  const viewParam = useSearchParams().get("view");
+  const view = ["assigned", "open", "active", "complete"].includes(viewParam ?? "")
+    ? viewParam : "assigned";
   const { data, loading, error, fromCache, refetch } = useAssignments();
   const outbox = useOutbox();
+  // The server and a field worker's phone may use different time zones.
+  // Keep the first render identical, then show the phone's local day.
+  const dayLabel = useSyncExternalStore(subscribeToCalendar, currentLocalDay, serverDayPlaceholder);
 
-  const dayLabel = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
-
-  const totalItems =
-    (data?.assignments?.length ?? 0) + (data?.legacy_jobs?.length ?? 0);
+  const matchesView = (status: string) => view === "assigned" ||
+    (view === "complete" && status === "completed") ||
+    (view === "active" && ["in_progress", "paused"].includes(status)) ||
+    (view === "open" && !["completed", "cancelled", "archived", "rejected"].includes(status));
+  const assignments = (data?.assignments ?? []).filter(item => item.work_orders && matchesView(item.work_orders.status));
+  const legacyJobs = (data?.legacy_jobs ?? []).filter(item => matchesView(item.status));
+  const totalItems = assignments.length + legacyJobs.length;
 
   return (
     <div className="space-y-4 max-w-xl mx-auto px-1">
@@ -50,6 +78,12 @@ export default function MyJobsPage() {
       </div>
 
       <OfflineBanner />
+
+      <nav aria-label="Assigned work views" className="flex flex-wrap gap-2">
+        {(["assigned", "open", "active", "complete"] as const).map(item =>
+          <Link key={item} href={`/my-jobs?view=${item}`} aria-current={view === item ? "page" : undefined}
+            className={`rounded-lg border px-3 py-2 text-sm capitalize ${view === item ? "border-redline bg-redline text-white" : "bg-white text-charcoal"}`}>{item}</Link>)}
+      </nav>
 
       <SyncStatusBar
         pendingCount={outbox.pendingCount}
@@ -90,7 +124,7 @@ export default function MyJobsPage() {
           <Briefcase size={40} className="mx-auto text-gray-300 mb-3" />
           <p className="font-semibold text-charcoal">No jobs today</p>
           <p className="text-sm text-muted mt-1 max-w-xs mx-auto">
-            You&apos;re not assigned to any jobs today. Check with your manager if you think this is wrong.
+            No {view === "assigned" ? "assigned" : view} jobs match this view. Check with your manager if you think this is wrong.
           </p>
           {fromCache && (
             <button
@@ -104,16 +138,12 @@ export default function MyJobsPage() {
       )}
 
       {/* New work-order assignments */}
-      {(data?.assignments?.length ?? 0) > 0 && (
+      {assignments.length > 0 && (
         <div className="space-y-3">
-          {data!.assignments.map((a) => {
+          {assignments.map((a) => {
             const wo = a.work_orders;
             if (!wo) return null;
-            const customerName =
-              wo.customers?.business_name ??
-              (wo.customers
-                ? `${wo.customers.first_name} ${wo.customers.last_name}`
-                : "");
+            const businessName = wo.customers?.business_name ?? "Job site";
             const address = wo.properties
               ? `${wo.properties.address_line1}, ${wo.properties.city}`
               : "";
@@ -140,7 +170,7 @@ export default function MyJobsPage() {
                     </span>
                   </div>
                   <p className="font-semibold text-charcoal leading-tight">{wo.title}</p>
-                  {customerName && <p className="text-sm text-muted">{customerName}</p>}
+                  <p className="text-sm text-muted">{businessName}</p>
                   {address && (
                     <div className="flex items-center gap-1 text-sm text-muted">
                       <MapPin size={12} className="flex-shrink-0" />
@@ -167,19 +197,15 @@ export default function MyJobsPage() {
       )}
 
       {/* Legacy jobs (bridged from old jobs table) */}
-      {(data?.legacy_jobs?.length ?? 0) > 0 && (
+      {legacyJobs.length > 0 && (
         <div className="space-y-3">
-          {(data?.assignments?.length ?? 0) > 0 && (
+          {assignments.length > 0 && (
             <p className="text-xs font-semibold text-muted uppercase tracking-wide px-1">
               Legacy Jobs
             </p>
           )}
-          {data!.legacy_jobs.map((job) => {
-            const customerName =
-              job.customers?.business_name ??
-              (job.customers
-                ? `${job.customers.first_name} ${job.customers.last_name}`
-                : "");
+          {legacyJobs.map((job) => {
+            const businessName = job.customers?.business_name ?? "Job site";
             const address = job.properties
               ? `${job.properties.address_line1}, ${job.properties.city}`
               : "";
@@ -196,7 +222,7 @@ export default function MyJobsPage() {
                     <span className="text-xs text-muted">#{job.job_number}</span>
                   </div>
                   <p className="font-semibold text-charcoal leading-tight">{label}</p>
-                  {customerName && <p className="text-sm text-muted">{customerName}</p>}
+                  <p className="text-sm text-muted">{businessName}</p>
                   {address && (
                     <div className="flex items-center gap-1 text-sm text-muted">
                       <MapPin size={12} className="flex-shrink-0" />

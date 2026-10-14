@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requireStaffUser } from "@/lib/api/auth";
 import Link from "next/link";
 import { Plus, Users2 } from "lucide-react";
 import StatusBadge from "@/components/ui/StatusBadge";
@@ -7,17 +7,21 @@ import { formatDate } from "@/lib/utils/format";
 export const metadata = { title: "Crews" };
 
 export default async function CrewsPage() {
-  const supabase = await createClient();
+  const access = await requireStaffUser("reviewer");
+  if (!access.ok) return <p>Active Admin account with verified MFA required.</p>;
+  const supabase = access.supabase;
 
   type CrewRow = {
     id: string; name: string; description: string | null; active: boolean; created_at: string;
     profiles: { first_name: string; last_name: string } | null;
   };
-  const { data: crews } = await supabase
+  const { data: crews, error } = await supabase
     .from("crews")
     .select("id, name, description, active, created_at, profiles(first_name, last_name)")
     .eq("active", true)
-    .order("name") as { data: CrewRow[] | null };
+    .order("name") as { data: CrewRow[] | null; error: { message: string } | null };
+
+  if (error) return <p>Crews could not be loaded. Refresh to retry.</p>;
 
   return (
     <div className="space-y-6">

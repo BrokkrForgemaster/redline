@@ -3,7 +3,9 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
-import { ADMIN_EMAILS, DEVELOPER_EMAILS } from "@/lib/auth/privileged-users";
+import { canWorkLegacyJob } from "@/lib/api/legacy-job-access";
+import { verifyStoredImage } from "@/lib/media/verify-image";
+import { hasMfaAssurance } from "@/lib/api/auth";
 
 type GpsPayload = {
   latitude: number;
@@ -12,7 +14,7 @@ type GpsPayload = {
   captured_at_device: string;
 };
 
-const MAX_PHOTO_BYTES = 25 * 1024 * 1024;
+const MAX_PHOTO_BYTES = 20 * 1024 * 1024;
 const ALLOWED_PHOTO_MIME_TYPES = new Set([
   "image/jpeg",
   "image/png",
@@ -96,7 +98,7 @@ async function insertLocationTag(
   if (!gps) return;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any).from("job_location_tags").insert({
+  const { error } = await (supabase as any).from("job_location_tags").insert({
     job_id: jobId,
     employee_id: userId,
     job_photo_id: jobPhotoId ?? null,
@@ -106,73 +108,40 @@ async function insertLocationTag(
     accuracy_meters: gps.accuracy_meters,
     captured_at_device: gps.captured_at_device,
   });
-}
-
-async function notifyPrivilegedUsersOfLegacyJobEvent(
-  event: "start" | "finish",
-  jobId: string,
-  actorId: string
-) {
-  const admin = getAdminClient();
-  const recipientEmails = [...ADMIN_EMAILS, ...DEVELOPER_EMAILS];
-
-  const [{ data: recipients }, { data: job }, { data: actor }] = await Promise.all([
-    admin
-      .from("profiles")
-      .select("id")
-      .in("email", recipientEmails)
-      .eq("status", "active"),
-    admin
-      .from("jobs")
-      .select("job_number, title")
-      .eq("id", jobId)
-      .single(),
-    admin
-      .from("profiles")
-      .select("first_name, last_name, email")
-      .eq("id", actorId)
-      .single(),
-  ]);
-
-  const recipientIds = ((recipients ?? []) as { id: string }[]).map((recipient) => recipient.id);
-  if (recipientIds.length === 0) return;
-
-  const worker = actor ? `${actor.first_name} ${actor.last_name}`.trim() || actor.email : "A subcontractor";
-  const action = event === "start" ? "started" : "ended";
-  const title = event === "start" ? "Job started" : "Job ended";
-  const body = `${worker} ${action} ${job?.job_number ?? "a job"}${job?.title ? `: ${job.title}` : ""}.`;
-
-  const { error } = await admin.from("notifications").insert(
-    recipientIds.map((userId) => ({
-      user_id: userId,
-      type: `job_${event}`,
-      title,
-      body,
-      action_url: `/jobs/${jobId}`,
-      entity_type: "job",
-      entity_id: jobId,
-    }))
-  );
-
-  if (error) console.error("Failed to insert admin legacy job notification", error);
+  if (error) throw new Error("Location tag was not saved.");
 }
 
 export async function clockIn(jobId: string, gps?: GpsPayload | null) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+  if (!(await canWorkLegacyJob(user.id, jobId))) return { error: "Active assignment required." };
+  if (!(await hasMfaAssurance(supabase))) return { error: "Verified MFA is required." };
+
+  const admin = getAdminClient();
+  const [{ count: tags, error: tagError }, { count: photos, error: photoError }] = await Promise.all([
+    admin.from("job_location_tags").select("id", { count: "exact", head: true })
+      .eq("job_id", jobId).eq("employee_id", user.id).eq("tag_type", "manual"),
+    admin.from("job_photos").select("id", { count: "exact", head: true })
+      .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "before"),
+  ]);
+  if (tagError || photoError) return { error: "Could not verify this job's location and before photos." };
+  if (!tags || (photos ?? 0) < 3) return { error: "Tag this job's location and save three before photos before clocking in." };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any;
 
-  // Guard: employee must not already be clocked in anywhere
-  const { data: existing } = await sb
+  // The personal workday clock is independent. Limit only overlapping job entries.
+  const { data: openJobs, error: lookupError } = await sb
     .from("time_entries")
     .select("id, job_id")
     .eq("employee_id", user.id)
+    .not("job_id", "is", null)
     .is("clock_out", null)
-    .maybeSingle();
+    .limit(1);
 
+  if (lookupError) return { error: "Could not check your current job clock. Try again." };
+  const existing = openJobs?.[0];
   if (existing) {
     if (existing.job_id === jobId) return { error: "You are already clocked in to this job." };
     return { error: "You are clocked in to another job. Please clock out first." };
@@ -186,24 +155,7 @@ export async function clockIn(jobId: string, gps?: GpsPayload | null) {
 
   if (error) return { error: "Failed to clock in. Please try again." };
 
-  const admin = getAdminClient();
-
-  // Advance job status if it hasn't started yet. Use service role so assigned
-  // subcontractors are not blocked by admin-only job update policies.
-  const { error: jobUpdateError } = await admin
-    .from("jobs")
-    .update({ status: "in_progress" })
-    .eq("id", jobId)
-    .in("status", ["scheduled", "en_route", "arrived", "approved", "ready_to_schedule"]);
-
-  if (jobUpdateError) {
-    console.error("Failed to mark legacy job in progress", jobUpdateError);
-  }
-
   await insertLocationTag(supabase, jobId, user.id, "start", gps ?? null);
-  await notifyPrivilegedUsersOfLegacyJobEvent("start", jobId, user.id).catch((error) => {
-    console.error("Failed to notify privileged users of job start", error);
-  });
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");
@@ -217,33 +169,35 @@ export async function clockOut(entryId: string, jobId: string, gps?: GpsPayload 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+  if (!(await canWorkLegacyJob(user.id, jobId))) return { error: "Active assignment required." };
+  if (!(await hasMfaAssurance(supabase))) return { error: "Verified MFA is required." };
 
   const admin = getAdminClient();
+  const { data: profile, error: profileError } = await admin.from("profiles")
+    .select("status").eq("id", user.id).single();
+  if (profileError || profile?.status !== "active") return { error: "Account is not active." };
+  const { data: entry, error: entryError } = await admin.from("time_entries")
+    .select("id, job_id").eq("id", entryId).eq("employee_id", user.id)
+    .eq("job_id", jobId).is("clock_out", null).maybeSingle();
+  if (entryError || !entry) return { error: "Clock entry does not belong to this job and worker." };
+  const { count: afterPhotos, error: photoError } = await admin.from("job_photos")
+    .select("id", { count: "exact", head: true })
+    .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "after");
+  if (photoError) return { error: "Could not verify this job's after photos." };
+  if ((afterPhotos ?? 0) < 3) return { error: "Save three after photos for this job before clocking out." };
   const { data: updatedEntry, error } = await admin
     .from("time_entries")
     .update({ clock_out: new Date().toISOString() })
     .eq("id", entryId)
     .eq("employee_id", user.id)
+    .eq("job_id", jobId)
     .is("clock_out", null)
     .select("id")
     .maybeSingle();
 
   if (error || !updatedEntry) return { error: "Failed to clock out. Please try again." };
 
-  const { error: jobUpdateError } = await admin
-    .from("jobs")
-    .update({ status: "completed" })
-    .eq("id", jobId)
-    .in("status", ["in_progress", "paused", "arrived", "en_route", "scheduled"]);
-
-  if (jobUpdateError) {
-    console.error("Failed to mark legacy job completed", jobUpdateError);
-  }
-
   await insertLocationTag(supabase, jobId, user.id, "finish", gps ?? null);
-  await notifyPrivilegedUsersOfLegacyJobEvent("finish", jobId, user.id).catch((error) => {
-    console.error("Failed to notify privileged users of job finish", error);
-  });
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");
@@ -257,11 +211,17 @@ export async function tagJobLocation(formData: FormData, jobId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+  if (!(await canWorkLegacyJob(user.id, jobId))) return { error: "Active assignment required." };
+  if (!(await hasMfaAssurance(supabase))) return { error: "Verified MFA is required." };
 
   const gps = parseGps(formData);
   if (!gps) return { error: "GPS location is required." };
 
-  await insertLocationTag(supabase, jobId, user.id, "manual", gps);
+  try {
+    await insertLocationTag(supabase, jobId, user.id, "manual", gps);
+  } catch {
+    return { error: "Location tag was not saved. Please try again." };
+  }
   revalidatePath(`/my-jobs/${jobId}`);
   return { success: true };
 }
@@ -270,6 +230,8 @@ export async function uploadJobPhoto(formData: FormData, jobId: string, type: "b
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+  if (!(await canWorkLegacyJob(user.id, jobId))) return { error: "Active assignment required." };
+  if (!(await hasMfaAssurance(supabase))) return { error: "Verified MFA is required." };
 
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { error: "No file provided" };
@@ -280,6 +242,11 @@ export async function uploadJobPhoto(formData: FormData, jobId: string, type: "b
   const mimeType = inferPhotoMimeType(file);
   if (!mimeType || !ALLOWED_PHOTO_MIME_TYPES.has(mimeType)) {
     return { error: "Unsupported photo type. Please upload a JPG, PNG, WebP, HEIC, or HEIF image." };
+  }
+  try {
+    await verifyStoredImage(Buffer.from(await file.arrayBuffer()), mimeType);
+  } catch {
+    return { error: "Photo is corrupt or its format does not match the selected file." };
   }
 
   const gps = parseGps(formData);
@@ -303,6 +270,7 @@ export async function uploadJobPhoto(formData: FormData, jobId: string, type: "b
       job_id: jobId,
       employee_id: user.id,
       storage_path: storagePath,
+      // Keep the historical column populated; authorized reads use signed URLs.
       url: publicUrl,
       photo_type: type,
       latitude: gps?.latitude ?? null,
@@ -328,5 +296,5 @@ export async function uploadJobPhoto(formData: FormData, jobId: string, type: "b
   );
 
   revalidatePath(`/my-jobs/${jobId}`);
-  return { url: publicUrl };
+  return { photo_id: (photo as { id: string }).id };
 }

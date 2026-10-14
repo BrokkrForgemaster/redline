@@ -1,5 +1,4 @@
 import { createAdminClient } from "@/lib/supabase/server";
-import { ADMIN_EMAILS, DEVELOPER_EMAILS } from "@/lib/auth/privileged-users";
 
 type RunAlertEvent = "start" | "finish";
 
@@ -9,36 +8,20 @@ export async function notifyPrivilegedUsersOfRunEvent(params: {
   workOrderId: string;
   actorId: string;
 }) {
-  const admin = createAdminClient() as any;
-  const recipientEmails = [...ADMIN_EMAILS, ...DEVELOPER_EMAILS];
+  const admin = createAdminClient();
 
-  const [{ data: recipients }, { data: run }] = await Promise.all([
-    admin
-      .from("profiles")
-      .select("id, email")
-      .in("email", recipientEmails)
-      .eq("status", "active"),
-    admin
-      .from("service_runs")
-      .select(`
-        id,
-        work_orders(work_order_number, title),
-        profiles!service_runs_primary_worker_id_fkey(first_name, last_name, email)
-      `)
-      .eq("id", params.serviceRunId)
-      .single(),
-  ]);
+  const { data: recipients, error: recipientError } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("role", "owner")
+    .eq("status", "active");
+  if (recipientError) throw new Error("Could not resolve owner alert recipients.");
 
   const recipientIds = ((recipients ?? []) as { id: string }[]).map((recipient) => recipient.id);
   if (recipientIds.length === 0) return;
 
-  const worker = run?.profiles
-    ? `${run.profiles.first_name} ${run.profiles.last_name}`.trim()
-    : "A subcontractor";
-  const workOrder = run?.work_orders;
   const title = params.event === "start" ? "Job started" : "Job ended";
-  const action = params.event === "start" ? "started" : "ended";
-  const body = `${worker} ${action} ${workOrder?.work_order_number ?? "a work order"}${workOrder?.title ? `: ${workOrder.title}` : ""}.`;
+  const body = params.event === "start" ? "An assigned service visit started." : "An assigned service visit finished.";
 
   const { error } = await admin.from("notifications").insert(
     recipientIds.map((userId) => ({

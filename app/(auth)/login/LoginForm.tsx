@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { loginSchema, type LoginInput } from "@/lib/validations/auth";
+import { mfaDestination, safeAuthNext } from "@/lib/auth/mfa-flow";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?: string }) {
@@ -24,7 +25,13 @@ export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?
 
   async function onSubmit(data: LoginInput) {
     setServerError(null);
-    const supabase = createClient();
+    let supabase: ReturnType<typeof createClient>;
+    try {
+      supabase = createClient();
+    } catch {
+      setServerError("Staff sign-in is unavailable because the portal configuration is missing. Reload the page; if it continues, contact the administrator.");
+      return;
+    }
 
     const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: data.email,
@@ -37,21 +44,26 @@ export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?
       return;
     }
 
-    // Check if MFA is required
+    // An owner-provisioned account stays invited until MFA and password change.
     if (authData.session && authData.session.user) {
-      const factors = await supabase.auth.mfa.listFactors();
-      const totpFactors = factors.data?.totp ?? [];
-      const verifiedFactor = totpFactors.find(f => f.status === "verified");
-
-      if (verifiedFactor) {
-        router.push("/mfa/challenge");
+      const { data: profile, error: profileError } = await supabase.from("profiles")
+        .select("status").eq("id", authData.session.user.id).single();
+      if (profileError || !profile || !["active", "invited"].includes(profile.status)) {
+        setServerError("Account access is unavailable. Contact the owner.");
         return;
       }
+      const destinationAfterMfa = profile.status === "invited" ? "/auth/setup" : safeAuthNext(next);
+      const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      if (assuranceError || !assurance) {
+        setServerError("Could not verify your security status. Please try again.");
+        return;
+      }
+      const destination = mfaDestination(assurance.currentLevel, assurance.nextLevel, destinationAfterMfa);
+      if (destination) { router.push(destination); return; }
+      if (profile.status === "invited") { router.push("/auth/setup"); return; }
     }
 
-    // Safe redirect (prevent open redirect)
-    const safeNext = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-    router.push(safeNext);
+    router.push(safeAuthNext(next));
     router.refresh();
   }
 
@@ -121,18 +133,6 @@ export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?
         )}
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          id="remember"
-          type="checkbox"
-          {...register("remember")}
-          className="h-4 w-4 rounded border-border text-redline focus:ring-redline"
-        />
-        <label htmlFor="remember" className="text-sm text-muted">
-          Keep me signed in
-        </label>
-      </div>
-
       <button
         type="submit"
         disabled={isSubmitting}
@@ -145,7 +145,7 @@ export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?
       <p className="text-center text-xs text-muted">
         New employee?{" "}
         <span className="text-charcoal">
-          Contact your administrator for an invitation.
+          Contact the owner to set up your staff account.
         </span>
       </p>
     </form>

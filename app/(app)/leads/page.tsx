@@ -3,6 +3,8 @@ import Link from "next/link";
 import { formatDate, formatPhone } from "@/lib/utils/format";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { Plus, ClipboardList } from "lucide-react";
+import { redirect } from "next/navigation";
+import { hasMfaAssurance } from "@/lib/api/auth";
 
 export const metadata = { title: "Leads" };
 
@@ -26,12 +28,19 @@ export default async function LeadsPage({
 }) {
   const { status = "open" } = await searchParams;
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+  const { data: profile } = await supabase.from("profiles")
+    .select("role, status").eq("id", user.id).single();
+  if (profile?.role !== "owner" || profile.status !== "active") redirect("/dashboard");
+  if (!(await hasMfaAssurance(supabase))) redirect("/mfa/challenge");
 
   const openStatuses = ["new", "contacted", "site_visit_scheduled", "site_visit_completed", "estimate_in_progress", "estimate_sent", "awaiting_customer"];
 
   let query = supabase
     .from("leads")
     .select(`id, first_name, last_name, email, phone, status, source, requested_services, follow_up_date, created_at,
+      inquiry_delivery_outbox(state, attempts, last_error_class),
       profiles!assigned_to(first_name, last_name)`)
     .order("created_at", { ascending: false })
     .limit(50);
@@ -74,12 +83,16 @@ export default async function LeadsPage({
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase hidden md:table-cell">Contact</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase">Status</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase hidden lg:table-cell">Source</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase hidden lg:table-cell">Delivery</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-muted uppercase hidden lg:table-cell">Follow Up</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {leads.map(lead => {
                 const isOverdue = lead.follow_up_date && new Date(lead.follow_up_date) < new Date() && !["won", "lost", "archived"].includes(lead.status);
+                const deliveryRaw = lead.inquiry_delivery_outbox as unknown as
+                  { state: string; attempts: number } | { state: string; attempts: number }[] | null;
+                const delivery = Array.isArray(deliveryRaw) ? deliveryRaw[0] : deliveryRaw;
                 return (
                   <tr key={lead.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-5 py-3">
@@ -101,6 +114,13 @@ export default async function LeadsPage({
                       />
                     </td>
                     <td className="px-5 py-3 text-muted hidden lg:table-cell capitalize">{lead.source?.replace(/_/g, " ")}</td>
+                    <td className="px-5 py-3 text-muted hidden lg:table-cell">
+                      {lead.source === "website_quote"
+                        ? delivery
+                          ? `${delivery.state} (${delivery.attempts} attempts)`
+                          : "Unavailable"
+                        : "—"}
+                    </td>
                     <td className="px-5 py-3 hidden lg:table-cell">
                       {lead.follow_up_date ? (
                         <span className={isOverdue ? "text-redline font-semibold" : "text-muted"}>

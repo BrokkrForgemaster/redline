@@ -3,6 +3,7 @@
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { propertySchema, type PropertyInput } from "@/lib/validations/customer";
@@ -173,8 +174,8 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
         </div>
       </section>
 
-      {/* Measurements */}
-      <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+      {/* Measurements belong to the standalone property workflow, not customer setup. */}
+      {!defaultCustomerId && <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 className="text-base font-semibold text-charcoal">Measurements</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -185,7 +186,7 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
               id="lotSizeSqft"
               type="number"
               min={0}
-              {...register("lotSizeSqft", { valueAsNumber: true })}
+              {...register("lotSizeSqft", { setValueAs: value => value === "" ? null : Number(value) })}
               className={fieldClass}
               placeholder="e.g. 8500"
             />
@@ -198,13 +199,13 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
               id="turfAreaSqft"
               type="number"
               min={0}
-              {...register("turfAreaSqft", { valueAsNumber: true })}
+              {...register("turfAreaSqft", { setValueAs: value => value === "" ? null : Number(value) })}
               className={fieldClass}
               placeholder="e.g. 5000"
             />
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Access & Notes */}
       <section className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
@@ -266,12 +267,12 @@ export default function PropertyForm({ customers, defaultCustomerId }: Props) {
           {isSubmitting && <Loader2 size={15} className="animate-spin" />}
           {isSubmitting ? "Saving…" : "Create Property"}
         </button>
-        <a
+        <Link
           href="/properties"
           className="px-6 py-2.5 text-sm font-medium text-charcoal hover:bg-gray-100 rounded-lg transition-colors"
         >
           Cancel
-        </a>
+        </Link>
       </div>
     </form>
   );

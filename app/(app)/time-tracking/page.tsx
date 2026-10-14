@@ -1,7 +1,9 @@
-import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
-import { Plus, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 import { formatDateTime } from "@/lib/utils/format";
+import { requireStaffUser } from "@/lib/api/auth";
+import { notFound } from "next/navigation";
+import TimeClock from "./TimeClock";
 
 export const metadata = { title: "Time Tracking" };
 
@@ -23,12 +25,14 @@ export default async function TimeTrackingPage({
   searchParams: Promise<SearchParams>;
 }) {
   const { date } = await searchParams;
-  const supabase = await createClient();
+  const access = await requireStaffUser();
+  if (!access.ok) notFound();
+  const supabase = access.supabase;
 
   let query = supabase
     .from("time_entries")
     .select(
-      "id, clock_in, clock_out, total_minutes, break_minutes, notes, is_manual, profiles!employee_id(first_name, last_name), jobs(job_number, title)"
+      "id, job_id, clock_in, clock_out, total_minutes, break_minutes, notes, is_manual, profiles!employee_id(first_name, last_name), jobs(job_number, title)"
     )
     .order("clock_in", { ascending: false })
     .limit(50);
@@ -49,11 +53,19 @@ export default async function TimeTrackingPage({
     query = query.gte("clock_in", start.toISOString());
   }
 
-  const { data: entries } = await query;
+  const { data: entries, error: entriesError } = await query;
+  const { data: openEntry, error: openError } = await supabase.from("time_entries")
+    .select("id, clock_in")
+    .eq("employee_id", access.user.id)
+    .is("job_id", null)
+    .is("clock_out", null)
+    .order("clock_in", { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
-  const totalMinutes =
-    entries?.reduce((sum, e) => sum + (e.total_minutes ?? 0), 0) ?? 0;
-  const totalHours = (totalMinutes / 60).toFixed(1);
+  // Personal and job time can overlap; adding them together would double-count hours.
+  const workdayHours = ((entries?.reduce((sum, e) => sum + (e.job_id ? 0 : (e.total_minutes ?? 0)), 0) ?? 0) / 60).toFixed(1);
+  const jobHours = ((entries?.reduce((sum, e) => sum + (e.job_id ? (e.total_minutes ?? 0) : 0), 0) ?? 0) / 60).toFixed(1);
 
   const tabs = [
     { key: "all", label: "All" },
@@ -69,17 +81,12 @@ export default async function TimeTrackingPage({
         <div>
           <h1 className="text-2xl font-bold text-charcoal">Time Tracking</h1>
           <p className="text-sm text-muted">
-            {entries?.length ?? 0} entries · {totalHours} total hours
+            {entries?.length ?? 0} recent entries · {workdayHours} workday hours and {jobHours} job hours in this list
           </p>
         </div>
-        <Link
-          href="/time-tracking/new"
-          className="flex items-center gap-2 bg-redline text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-redline-dark transition-colors"
-        >
-          <Plus size={16} />
-          Log Time
-        </Link>
       </div>
+
+      {entriesError || openError ? <p role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-red-800">Time entries could not be loaded. Please refresh before clocking in or out.</p> : <TimeClock openEntry={openEntry} />}
 
       {/* Total Hours Summary */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
@@ -88,8 +95,9 @@ export default async function TimeTrackingPage({
             <Clock size={20} className="text-redline" />
           </div>
           <div>
-            <p className="text-sm text-muted">Total Hours</p>
-            <p className="text-2xl font-bold text-charcoal">{totalHours}h</p>
+            <p className="text-sm text-muted">Workday hours in recent entries</p>
+            <p className="text-2xl font-bold text-charcoal">{workdayHours}h</p>
+            <p className="text-xs text-muted">Job time: {jobHours}h, tracked separately</p>
           </div>
         </div>
       </div>
@@ -126,12 +134,7 @@ export default async function TimeTrackingPage({
                 ? "No entries for this time period"
                 : "Log time to get started"}
             </p>
-            <Link
-              href="/time-tracking/new"
-              className="mt-4 inline-block text-sm text-redline hover:underline"
-            >
-              Log Time
-            </Link>
+            <p className="mt-4 text-sm text-muted">Use the clock above to record your workday.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -181,7 +184,7 @@ export default async function TimeTrackingPage({
                       <td className="px-5 py-3 text-muted hidden md:table-cell">
                         {job ? (
                           <Link
-                            href={`/jobs/${entry.id}`}
+                            href={`/jobs/${entry.job_id}`}
                             className="hover:text-redline transition-colors"
                           >
                             {job.job_number} — {job.title}

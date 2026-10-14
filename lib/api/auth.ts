@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/server";
 import { apiError } from "./errors";
+import { ASSIGNABLE_STAFF_ROLES } from "@/lib/auth/roles";
 
 export type ApiSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -11,6 +12,14 @@ export async function requireApiUser() {
   } = await supabase.auth.getUser();
 
   if (user) {
+    const { data: profile, error } = await supabase.from("profiles")
+      .select("status").eq("id", user.id).single();
+    if (error || profile?.status !== "active") {
+      return { ok: false as const, response: apiError(403, "ACCOUNT_INACTIVE", "Account is not active.") };
+    }
+    if (!(await hasMfaAssurance(supabase))) {
+      return { ok: false as const, response: apiError(403, "MFA_REQUIRED", "Verified MFA is required.") };
+    }
     return {
       ok: true as const,
       supabase,
@@ -41,6 +50,15 @@ export async function requireApiUser() {
     };
   }
 
+  const { data: tokenProfile, error: profileError } = await admin.from("profiles")
+    .select("status").eq("id", tokenUser.id).single();
+  if (profileError || tokenProfile?.status !== "active") {
+    return { ok: false as const, response: apiError(403, "ACCOUNT_INACTIVE", "Account is not active.") };
+  }
+  if (!(await hasMfaAssurance(admin, token))) {
+    return { ok: false as const, response: apiError(403, "MFA_REQUIRED", "Verified MFA is required.") };
+  }
+
   return {
     ok: true as const,
     supabase,
@@ -50,16 +68,15 @@ export async function requireApiUser() {
 
 export const STAFF_ROLES = [
   "owner",
-  "developer",
-  "administrator",
-  "operations_manager",
-  "snow_operations_manager",
-  "office_manager",
-  "crew_leader",
-  "estimator",
+  ...ASSIGNABLE_STAFF_ROLES,
 ] as const;
 
-export const REVIEWER_ROLES = ["owner", "developer", "administrator", "operations_manager"] as const;
+export const REVIEWER_ROLES = ["owner"] as const;
+
+export async function hasMfaAssurance(supabase: ApiSupabaseClient, token?: string): Promise<boolean> {
+  const { data, error } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel(token);
+  return !error && data?.currentLevel === "aal2" && data?.nextLevel === "aal2";
+}
 
 export async function requireStaffUser(minRole: "staff" | "reviewer" = "staff") {
   const supabase = await createClient();
@@ -78,13 +95,13 @@ export async function requireStaffUser(minRole: "staff" | "reviewer" = "staff") 
   const sb = supabase as any;
   const { data: profile } = await sb
     .from("profiles")
-    .select("id, role")
+    .select("id, role, status")
     .eq("id", user.id)
     .single();
 
-  const allowed = minRole === "reviewer"
+  const allowed = profile?.status === "active" && (minRole === "reviewer"
     ? (REVIEWER_ROLES as readonly string[]).includes(profile?.role ?? "")
-    : (STAFF_ROLES as readonly string[]).includes(profile?.role ?? "");
+    : (STAFF_ROLES as readonly string[]).includes(profile?.role ?? ""));
 
   if (!allowed) {
     return {
@@ -93,17 +110,15 @@ export async function requireStaffUser(minRole: "staff" | "reviewer" = "staff") 
     };
   }
 
+  if (!(await hasMfaAssurance(supabase))) {
+    return { ok: false as const, response: apiError(403, "FORBIDDEN", "Verified MFA is required.") };
+  }
+
   return { ok: true as const, supabase, user, profile };
 }
 
 export function mapRole(role: string) {
-  if (role === "owner") return "owner_super_admin";
+  if (role === "owner") return "admin";
   if (role === "developer") return "developer";
-  if (role === "administrator") return "admin";
-  if (["operations_manager", "snow_operations_manager", "crew_leader"].includes(role)) {
-    return "supervisor_foreman";
-  }
-  if (role === "crew_member") return "employee";
-  if (role === "read_only") return "auditor_read_only";
   return role;
 }
