@@ -2,6 +2,7 @@
 BEGIN;
 CREATE SCHEMA auth;
 CREATE ROLE authenticated;
+CREATE ROLE anon;
 CREATE TYPE public.app_role AS ENUM
   ('owner','developer','mowing_crew_lead','mowing_crew_laborer','snow_plow_operator','subcontractor');
 CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$

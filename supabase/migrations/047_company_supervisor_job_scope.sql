@@ -18,6 +18,7 @@ SET search_path = public, pg_temp AS $$
   )
 $$;
 REVOKE ALL ON FUNCTION public.is_current_company_supervisor_for_crew(uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.is_current_company_supervisor_for_crew(uuid) FROM anon;
 REVOKE ALL ON FUNCTION public.is_current_company_supervisor_for_crew(uuid) FROM authenticated;
 GRANT EXECUTE ON FUNCTION public.is_current_company_supervisor_for_crew(uuid) TO authenticated;
 
