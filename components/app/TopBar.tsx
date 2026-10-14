@@ -72,12 +72,12 @@ export default function TopBar({ profile, onMenuClick }: Props) {
   const playAlertTone = useCallback(async () => {
     try {
       const AudioContextCtor = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (!AudioContextCtor) return;
+      if (!AudioContextCtor) return false;
 
       const ctx = audioRef.current ?? new AudioContextCtor();
       audioRef.current = ctx;
       if (ctx.state === "suspended") await ctx.resume();
-      if (ctx.state !== "running") return;
+      if (ctx.state !== "running") return false;
 
       const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -91,8 +91,10 @@ export default function TopBar({ profile, onMenuClick }: Props) {
       gain.connect(ctx.destination);
       oscillator.start();
       oscillator.stop(ctx.currentTime + 0.35);
+      return true;
     } catch {
       // Browser autoplay/audio policy can block this until the first user gesture.
+      return false;
     }
   }, []);
 
@@ -164,6 +166,7 @@ export default function TopBar({ profile, onMenuClick }: Props) {
     let checkedSince: string | null = null;
     let requestSequence = 0;
     let checkingNew = false;
+    let initializing = false;
     let active = true;
 
     function announce(next: NotificationItem) {
@@ -249,31 +252,39 @@ export default function TopBar({ profile, onMenuClick }: Props) {
       .subscribe();
 
     async function initialize() {
+      if (initializing || checkedSince || !active) return;
+      initializing = true;
       // Baseline all alert states, not only unread ones. A previously read
       // alert must not ring again when the page first opens.
-      const { data, error } = await supabase.from("notifications")
-        .select("id, created_at")
-        .eq("user_id", profile.id)
-        .order("created_at", { ascending: false })
-        .limit(1);
-      if (!active) return;
-      if (error) {
-        setAlertError("Alerts could not be refreshed. Retry when connected.");
-        return;
+      try {
+        const { data, error } = await supabase.from("notifications")
+          .select("id, created_at")
+          .eq("user_id", profile.id)
+          .order("created_at", { ascending: false })
+          .limit(1);
+        if (!active) return;
+        if (error) throw error;
+        if (data?.[0]) {
+          checkedSince = data[0].created_at;
+          seenAlertIds.current.add(data[0].id);
+        } else {
+          checkedSince = new Date().toISOString();
+        }
+        await loadUnread();
+        // Reconcile anything inserted while realtime was connecting.
+        await checkNewAlerts();
+      } catch {
+        if (active) setAlertError("Alerts could not be refreshed. Retry when connected.");
+      } finally {
+        initializing = false;
       }
-      if (data?.[0]) {
-        checkedSince = data[0].created_at;
-        seenAlertIds.current.add(data[0].id);
-      } else {
-        checkedSince = new Date().toISOString();
-      }
-      await loadUnread();
-      // Reconcile anything inserted while realtime was connecting.
-      await checkNewAlerts();
     }
 
     void initialize();
-    const interval = window.setInterval(() => void checkNewAlerts(), 15000);
+    const interval = window.setInterval(() => {
+      if (checkedSince) void checkNewAlerts();
+      else void initialize();
+    }, 15000);
 
     return () => {
       active = false;
@@ -422,6 +433,19 @@ export default function TopBar({ profile, onMenuClick }: Props) {
                   </button>
                 )}
               </div>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  await primeAlertAudio();
+                  const requested = await playAlertTone();
+                  if (!requested) setAlertError("This browser blocked sound. Check site audio permission, then tap Test sound again.");
+                  else setAlertError(null);
+                }}
+                className="px-4 py-2 text-xs font-semibold text-redline hover:underline"
+              >
+                Test sound
+              </button>
 
               {alertError && <p role="alert" className="px-4 py-2 text-xs text-red-700">{alertError}</p>}
 

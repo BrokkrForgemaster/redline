@@ -26,6 +26,7 @@ interface Job {
   title: string;
   service_type: string;
   status: string;
+  is_recurring: boolean;
   scheduled_start: string | null;
   actual_start: string | null;
   actual_end: string | null;
@@ -263,11 +264,14 @@ export default function FieldJobView({
     if (!activeEntry) return;
     startClockTransition(async () => {
       const loc = await captureLocation();
+      if (!loc) return;
       const result = await clockOut(activeEntry.id, job.id, loc);
       if (result.error) {
         toast.error(result.error);
       } else {
-        toast.success(loc ? "Clocked out and location tagged." : "Clocked out.");
+        toast.success(result.jobStatus === "completed"
+          ? "Job completed and clocked out."
+          : "Visit finished and clocked out. The recurring or project work remains open.");
         router.refresh();
       }
     });
@@ -672,12 +676,15 @@ export default function FieldJobView({
             ) : (
               <StopCircle size={28} />
             )}
-            {gps.acquiring ? "Getting GPS..." : isClocking ? "Clocking out..." : "Clock Out"}
+            {gps.acquiring ? "Getting GPS..." : isClocking ? "Finishing..." : "Finish Work & Clock Out"}
           </button>
           {!canClockOut && (
             <p className="text-center text-sm text-muted">
               {AFTER_REQUIRED} after photos required to clock out.
             </p>
+          )}
+          {job.is_recurring && (
+            <p className="text-center text-sm text-muted">Finishing this visit keeps future recurring work open.</p>
           )}
         </div>
       )}

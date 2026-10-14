@@ -171,40 +171,28 @@ export async function clockOut(entryId: string, jobId: string, gps?: GpsPayload 
   if (!user) return { error: "Not authenticated" };
   if (!(await canWorkLegacyJob(user.id, jobId))) return { error: "Active assignment required." };
   if (!(await hasMfaAssurance(supabase))) return { error: "Verified MFA is required." };
-
-  const admin = getAdminClient();
-  const { data: profile, error: profileError } = await admin.from("profiles")
-    .select("status").eq("id", user.id).single();
-  if (profileError || profile?.status !== "active") return { error: "Account is not active." };
-  const { data: entry, error: entryError } = await admin.from("time_entries")
-    .select("id, job_id").eq("id", entryId).eq("employee_id", user.id)
-    .eq("job_id", jobId).is("clock_out", null).maybeSingle();
-  if (entryError || !entry) return { error: "Clock entry does not belong to this job and worker." };
-  const { count: afterPhotos, error: photoError } = await admin.from("job_photos")
-    .select("id", { count: "exact", head: true })
-    .eq("job_id", jobId).eq("employee_id", user.id).eq("photo_type", "after");
-  if (photoError) return { error: "Could not verify this job's after photos." };
-  if ((afterPhotos ?? 0) < 3) return { error: "Save three after photos for this job before clocking out." };
-  const { data: updatedEntry, error } = await admin
-    .from("time_entries")
-    .update({ clock_out: new Date().toISOString() })
-    .eq("id", entryId)
-    .eq("employee_id", user.id)
-    .eq("job_id", jobId)
-    .is("clock_out", null)
-    .select("id")
-    .maybeSingle();
-
-  if (error || !updatedEntry) return { error: "Failed to clock out. Please try again." };
-
-  await insertLocationTag(supabase, jobId, user.id, "finish", gps ?? null);
+  if (!gps) return { error: "A current GPS location is required to finish this job." };
+  // The function saves the finish tag, closes this worker's job clock and
+  // updates the shared one-time job with history and alerts in one transaction.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any).rpc("finish_legacy_job_clock", {
+    p_entry_id: entryId,
+    p_job_id: jobId,
+    p_latitude: gps.latitude,
+    p_longitude: gps.longitude,
+    p_accuracy_meters: gps.accuracy_meters,
+    p_captured_at_device: gps.captured_at_device,
+  });
+  if (error || !data?.clockOut || data.entryId !== entryId) {
+    return { error: "Job finish was not confirmed. Keep the photos and retry after checking your connection and GPS." };
+  }
 
   revalidatePath(`/my-jobs/${jobId}`);
   revalidatePath("/my-jobs");
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath("/dashboard");
-  return { success: true };
+  return { success: true, jobStatus: data.jobStatus as string };
 }
 
 export async function tagJobLocation(formData: FormData, jobId: string) {
