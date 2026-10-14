@@ -52,7 +52,7 @@ export async function GET() {
         scheduled_end,
         timezone,
         instructions,
-        customers(id, first_name, last_name, business_name),
+        customers(business_name),
         properties(
           id,
           property_name,
@@ -102,7 +102,7 @@ export async function GET() {
         scheduled_end,
         work_instructions,
         access_notes,
-        customers(id, first_name, last_name, business_name),
+        customers(business_name),
         properties(id, property_name, address_line1, city, state, zip, latitude, longitude, access_instructions)
       `)
       .or(legacyOrFilters.join(","))

@@ -44,15 +44,23 @@ export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?
       return;
     }
 
-    // Check if MFA is required
+    // An owner-provisioned account stays invited until MFA and password change.
     if (authData.session && authData.session.user) {
+      const { data: profile, error: profileError } = await supabase.from("profiles")
+        .select("status").eq("id", authData.session.user.id).single();
+      if (profileError || !profile || !["active", "invited"].includes(profile.status)) {
+        setServerError("Account access is unavailable. Contact the owner.");
+        return;
+      }
+      const destinationAfterMfa = profile.status === "invited" ? "/auth/setup" : safeAuthNext(next);
       const { data: assurance, error: assuranceError } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       if (assuranceError || !assurance) {
         setServerError("Could not verify your security status. Please try again.");
         return;
       }
-      const destination = mfaDestination(assurance.currentLevel, assurance.nextLevel, safeAuthNext(next));
+      const destination = mfaDestination(assurance.currentLevel, assurance.nextLevel, destinationAfterMfa);
       if (destination) { router.push(destination); return; }
+      if (profile.status === "invited") { router.push("/auth/setup"); return; }
     }
 
     router.push(safeAuthNext(next));
@@ -137,7 +145,7 @@ export default function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?
       <p className="text-center text-xs text-muted">
         New employee?{" "}
         <span className="text-charcoal">
-          Contact your administrator for an invitation.
+          Contact the owner to set up your staff account.
         </span>
       </p>
     </form>

@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       `id, status, started_at, finished_at, submitted_at, reviewed_at, reviewed_by,
        approved_at, rejected_at, rejection_reason, version_number, created_at,
        work_orders(id, work_order_number, title, scheduled_start, instructions,
-         customers(id, first_name, last_name, business_name),
+         customers(business_name),
          properties(id, address_line1, city, state, zip)
        ),
        profiles!service_runs_primary_worker_id_fkey(id, first_name, last_name)`

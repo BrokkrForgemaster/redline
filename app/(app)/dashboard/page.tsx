@@ -98,7 +98,7 @@ async function loadAssignedWork(userId: string) {
   if (assignmentError) throw new Error("Could not load work-order assignments.");
   const workOrderIds = [...new Set(((assignments ?? []) as { work_order_id: string }[]).map(row => row.work_order_id))];
   const workOrderResult = workOrderIds.length
-    ? await sb.from("work_orders").select("id, legacy_job_id, work_order_number, title, status, scheduled_start, customers(first_name, last_name, business_name), properties(address_line1, city, state, latitude, longitude)")
+    ? await sb.from("work_orders").select("id, legacy_job_id, work_order_number, title, status, scheduled_start, customers(business_name), properties(address_line1, city, state, latitude, longitude)")
       .in("id", workOrderIds).order("scheduled_start", { ascending: true, nullsFirst: false })
     : { data: [], error: null };
   if (workOrderResult.error) throw new Error("Could not load assigned work orders.");
@@ -115,7 +115,7 @@ async function loadAssignedWork(userId: string) {
     .from("jobs")
     .select(`
       id, job_number, title, status, scheduled_start,
-      customers(first_name, last_name, business_name),
+      customers(business_name),
       properties(address_line1, city, state)
     `)
     .or(filters.join(","))
@@ -263,14 +263,15 @@ function AssignedDashboard({ jobs, workOrders, role }: { jobs: JobRow[]; workOrd
           <p className="mt-1 text-sm text-gray-400">Track assigned work, GPS starts, and required before/after photos.</p>
         </div>
         <div className="grid grid-cols-3 gap-3">
-          <Metric label="Open" value={open} icon={Briefcase} />
-          <Metric label="Active" value={active} icon={PlayCircle} />
-          <Metric label="Complete" value={complete} icon={CheckCircle2} />
+          <Metric label="Open" value={open} icon={Briefcase} href="/my-jobs?view=open" />
+          <Metric label="Active" value={active} icon={PlayCircle} href="/my-jobs?view=active" />
+          <Metric label="Complete" value={complete} icon={CheckCircle2} href="/my-jobs?view=complete" />
         </div>
+        <Link href="/my-jobs?view=assigned" className="inline-block text-sm font-semibold text-white underline">View all assigned jobs</Link>
         <Panel title="Assigned Jobs">
           {workOrders.map(workOrder => (
             <Link key={workOrder.id} href={`/my-jobs/run/${workOrder.id}`} className="block px-4 py-4 hover:bg-white/5 transition-colors">
-              <RowTitle number={workOrder.work_order_number} title={workOrder.title} customer={formatCustomer(workOrder.customers)} address={formatAddress(workOrder.properties)} status={workOrder.status} />
+              <RowTitle number={workOrder.work_order_number} title={workOrder.title} customer={formatBusiness(workOrder.customers)} address={formatAddress(workOrder.properties)} status={workOrder.status} />
             </Link>
           ))}
           {jobs.length > 0 ? <JobList jobs={jobs} assigned /> : workOrders.length === 0 ? <Empty text="No assigned jobs yet." /> : null}
@@ -295,7 +296,7 @@ function JobList({ jobs, assigned = false }: { jobs: JobRow[]; assigned?: boolea
   if (jobs.length === 0) return <Empty text={assigned ? "No assigned jobs yet." : "No open jobs."} />;
   return jobs.map((job) => (
     <Link key={job.id} href={assigned ? `/my-jobs/${job.id}` : `/jobs/${job.id}`} className="block px-4 py-4 hover:bg-white/5 transition-colors">
-      <RowTitle number={job.job_number} title={job.title} customer={formatCustomer(job.customers)} address={formatAddress(job.properties)} status={job.status} />
+      <RowTitle number={job.job_number} title={job.title} customer={assigned ? formatBusiness(job.customers) : formatCustomer(job.customers)} address={formatAddress(job.properties)} status={job.status} />
     </Link>
   ));
 }
@@ -384,6 +385,10 @@ function Empty({ text }: { text: string }) {
 
 function formatCustomer(customer: JobRow["customers"] | WorkOrderRow["customers"]) {
   return customer?.business_name ?? (customer ? `${customer.first_name} ${customer.last_name}` : "Customer");
+}
+
+function formatBusiness(customer: JobRow["customers"] | WorkOrderRow["customers"]) {
+  return customer?.business_name || "Job site";
 }
 
 function formatAddress(property: JobRow["properties"] | WorkOrderRow["properties"]) {

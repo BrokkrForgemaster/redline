@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     ? { data: [], error: null }
     : await (() => {
       let query = sb.from("work_orders")
-        .select("id, title, status, scheduled_start, scheduled_end, timezone, customers(first_name, last_name)")
+        .select("id, title, status, scheduled_start, scheduled_end, timezone, customers(business_name)")
         .gte("scheduled_start", start).lt("scheduled_start", end)
         .order("scheduled_start", { ascending: true }).limit(MAX_MONTH_ITEMS + 1);
       if (allowedIds) query = query.in("id", allowedIds);
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     ? { data: [], error: null }
     : await (() => {
       let query = sb.from("jobs")
-        .select("id, title, status, scheduled_date, scheduled_start, scheduled_end, customers(first_name, last_name), properties(timezone)")
+        .select("id, title, status, scheduled_date, scheduled_start, scheduled_end, customers(business_name), properties(timezone)")
         .gte("scheduled_date", firstDay).lt("scheduled_date", nextMonth)
         .not("status", "in", "(cancelled,archived)")
         .order("scheduled_date", { ascending: true }).limit(MAX_MONTH_ITEMS + 1);

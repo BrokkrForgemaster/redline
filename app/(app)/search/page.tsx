@@ -16,7 +16,7 @@ type SearchResult = {
   total_count: number;
 };
 
-const statuses = ["all", "scheduled", "assigned", "ready", "in_progress", "paused", "submitted", "needs_review", "completed"];
+const statuses = ["all", "open", "active", "scheduled", "assigned", "ready", "in_progress", "paused", "submitted", "needs_review", "completed"];
 const sorts = ["scheduled_asc", "scheduled_desc", "updated_desc"];
 
 export default async function SearchPage({ searchParams }: {
@@ -36,7 +36,7 @@ export default async function SearchPage({ searchParams }: {
 
   let results: SearchResult[] = [];
   let error: string | null = null;
-  if (query) {
+  {
     // Migration 033 provides this scoped RPC; generated schema types lag SQL.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const response = await (client as any).rpc("search_assigned_work_orders", {
@@ -59,10 +59,10 @@ export default async function SearchPage({ searchParams }: {
     <div className="mx-auto max-w-4xl space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-charcoal">Search Work</h1>
-        <p className="mt-1 text-sm text-muted">Results follow your current assignments and company membership.</p>
+        <p className="mt-1 text-sm text-muted">Results follow your current assignments and company membership. Staff search includes job number, title, business name and address.</p>
       </div>
       <form action="/search" className="grid gap-3 rounded-xl border bg-white p-4 sm:grid-cols-[1fr_auto_auto_auto]">
-        <input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Job number, title, customer or address"
+        <input name="q" type="search" defaultValue={query} maxLength={100} placeholder={profile.role === "owner" ? "Job, customer, business or address" : "Job, business or address"}
           className="min-w-0 rounded-lg border px-3 py-2" aria-label="Search work" />
         <select name="status" defaultValue={safeStatus} aria-label="Status" className="rounded-lg border px-3 py-2">
           {statuses.map(value => <option key={value} value={value}>{value.replace(/_/g, " ")}</option>)}
@@ -76,7 +76,7 @@ export default async function SearchPage({ searchParams }: {
       </form>
       {query && <Link href="/search" className="text-sm font-medium text-redline underline">Reset filters</Link>}
       {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}</p>}
-      {!error && query && (
+      {!error && (
         <div className="space-y-3">
           <p className="text-sm text-muted">{total} matching work orders</p>
           {results.length === 0 && <p className="rounded-xl border bg-white p-8 text-center text-muted">No matching assigned work.</p>}

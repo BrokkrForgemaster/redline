@@ -16,7 +16,7 @@ function employeeStatusBadge(status: string): {
   const map: Record<string, { label: string; variant: "green" | "red" | "yellow" | "gray" }> = {
     active: { label: "Active", variant: "green" },
     suspended: { label: "Suspended", variant: "red" },
-    invited: { label: "Invited", variant: "yellow" },
+    invited: { label: "Setup required", variant: "yellow" },
     inactive: { label: "Inactive", variant: "gray" },
   };
   return map[status] ?? { label: status, variant: "gray" };
@@ -48,12 +48,10 @@ export default async function EmployeesPage({
 
   const { data: employees, error } = await query;
   if (error) throw new Error("Employee list is unavailable.");
-  const { data: invitations, error: invitationError } = await supabase.from("staff_invitations")
-    .select("id,email,first_name,last_name,assigned_role,status,created_at,provider_error")
-    .in("status", ["pending", "failed"])
-    .order("created_at", { ascending: false });
-  if (invitationError) throw new Error("Invitation list is unavailable. Apply the staff invitation migration.");
-
+  const { data: pendingSetups, error: setupError } = await supabase.from("staff_account_setups")
+    .select("user_id,assigned_role").eq("status", "pending");
+  if (setupError) throw new Error("Staff account setup data is unavailable. Apply the owner-provisioned account migration.");
+  const pendingRoles = new Map((pendingSetups ?? []).map(item => [item.user_id, item.assigned_role]));
   const tabs = ["all", "active", "invited", "inactive"];
 
   return (
@@ -64,11 +62,11 @@ export default async function EmployeesPage({
           <p className="text-sm text-muted">{employees?.length ?? 0} total</p>
         </div>
         <Link
-          href="/employees/invite"
+          href="/employees/new"
           className="flex items-center gap-2 bg-redline text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-redline-dark transition-colors"
         >
           <Plus size={16} />
-          Invite Employee
+          Create Staff Account
         </Link>
       </div>
 
@@ -98,13 +96,13 @@ export default async function EmployeesPage({
             <p className="text-sm text-muted mt-1">
               {status && status !== "all"
                 ? `No ${status} employees`
-                : "Invite your first employee to get started"}
+                : "Create your first staff account to get started"}
             </p>
             <Link
-              href="/employees/invite"
+              href="/employees/new"
               className="mt-4 inline-block text-sm text-redline hover:underline"
             >
-              Invite Employee
+              Create Staff Account
             </Link>
           </div>
         ) : (
@@ -150,7 +148,7 @@ export default async function EmployeesPage({
                         {employee.email ?? "—"}
                       </td>
                       <td className="px-5 py-3 text-muted capitalize hidden sm:table-cell">
-                        {employee.role?.replace(/_/g, " ") ?? "—"}
+                        {(pendingRoles.get(employee.id) ?? employee.role)?.replace(/_/g, " ") ?? "—"}
                       </td>
                       <td className="px-5 py-3">
                         <StatusBadge label={badge.label} variant={badge.variant} />
@@ -166,16 +164,6 @@ export default async function EmployeesPage({
           </div>
         )}
       </div>
-      {(invitations?.length ?? 0) > 0 && <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Invitation follow-up</h2>
-        <div className="rounded border bg-white divide-y">
-          {invitations?.map(invitation => <div key={invitation.id} className="p-4 text-sm">
-            <p className="font-medium">{invitation.first_name} {invitation.last_name} · {invitation.email}</p>
-            <p className="text-muted">{String(invitation.assigned_role).replaceAll("_", " ")} · {invitation.status}</p>
-            {invitation.provider_error && <p className="text-red-700">Provider step needs review before retrying.</p>}
-          </div>)}
-        </div>
-      </section>}
     </div>
   );
 }

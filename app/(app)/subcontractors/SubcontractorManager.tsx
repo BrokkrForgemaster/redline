@@ -41,7 +41,7 @@ export default function SubcontractorManager({ companies, memberships, people }:
     <div className="flex items-start justify-between gap-4">
       <div><h1 className="text-2xl font-bold">Subcontractors</h1>
         <p className="text-sm text-muted">Create a company, attach an active Subcontractor account, then create its crew.</p></div>
-      <Link href="/employees/invite" className="text-redline underline">Invite account</Link>
+      <Link href="/employees/new" className="text-redline underline">Create staff account</Link>
     </div>
     {message && <p role="status" className="rounded border p-3">{message}</p>}
     <form onSubmit={create} className="rounded border bg-white p-5 space-y-3">

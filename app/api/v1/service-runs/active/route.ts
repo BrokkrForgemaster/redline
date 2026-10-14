@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         title,
         scheduled_start,
         instructions,
-        customers(id, first_name, last_name, business_name),
+        customers(business_name),
         properties(
           id, address_line1, city, state, zip,
           geofence_radius_meters,

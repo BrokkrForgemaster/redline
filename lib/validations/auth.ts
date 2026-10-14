@@ -77,6 +77,14 @@ export const inviteEmployeeSchema = z.object({
   ]),
 });
 
+export const provisionStaffSchema = inviteEmployeeSchema.extend({
+  initialPassword: z.string().min(12, "Initial password must be at least 12 characters")
+    .max(128, "Initial password is too long")
+    .refine(value => !COMMON_PASSWORDS.includes(value.toLowerCase()), "Choose a stronger password"),
+});
+
+export const completeStaffSetupSchema = changePasswordSchema;
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
@@ -84,3 +92,4 @@ export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
 export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
 export type InviteEmployeeInput = z.infer<typeof inviteEmployeeSchema>;
+export type ProvisionStaffInput = z.infer<typeof provisionStaffSchema>;
